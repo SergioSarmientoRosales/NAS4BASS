@@ -8,7 +8,7 @@ from search_space.model_builder import get_model
 from evaluators.metrics.params_score import compute_param_score
 from evaluators.metrics.synflow import compute_synflow
 from evaluators.metrics.epe_nas import compute_epe_nas
-
+from evaluators.metrics.fisher import compute_fisher
 
 class ZeroCostEvaluator(BaseEvaluator):
     def __init__(
@@ -21,7 +21,7 @@ class ZeroCostEvaluator(BaseEvaluator):
         self.verbose = verbose
         self.input_shape = input_shape
 
-        valid_metrics = {"param_score", "synflow", "epe_nas"}
+        valid_metrics = {"param_score", "synflow", "epe_nas", "fisher"}
         if self.metric_name not in valid_metrics:
             raise ValueError(
                 f"Unknown zero-cost metric '{self.metric_name}'. "
@@ -44,6 +44,13 @@ class ZeroCostEvaluator(BaseEvaluator):
 
             elif self.metric_name == "epe_nas":
                 score = compute_epe_nas(
+                    model=model,
+                    input_shape=self.input_shape,
+                    batch_size=8,
+                )
+
+            elif self.metric_name == "fisher":
+                score = compute_fisher(
                     model=model,
                     input_shape=self.input_shape,
                     batch_size=8,
