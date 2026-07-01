@@ -159,6 +159,15 @@ Typical outputs include:
 
 Generated outputs should not be committed unless they are intentionally curated for a release or paper artifact.
 
+## Open Access And Licensing
+
+This repository uses a permissive open-access licensing structure:
+
+- Source code is released under the MIT License. See [LICENSE](LICENSE).
+- Non-code research artifacts, including documentation, curated reference CSV files, tables, and intentionally included reproducibility materials, are released under CC BY 4.0 unless otherwise noted. See [LICENSES/CC-BY-4.0.md](LICENSES/CC-BY-4.0.md).
+
+Third-party datasets, external publications, and package dependencies are not relicensed by this repository and remain subject to their original terms.
+
 ## Research Timeline And References
 
 See [docs/research_timeline.md](docs/research_timeline.md) for a chronological list of related publications and current manuscripts connected with this repository.
