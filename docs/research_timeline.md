@@ -1,59 +1,40 @@
 # Research Timeline And References
 
-NAS4BASS is part of a broader collaborative research line on Neural Architecture Search (NAS), BASS-style search spaces, super-resolution image restoration (SRIR), multi-objective optimization, surrogate modeling, zero-cost predictors, and post-search decision making.
+This page lists related publications and ongoing manuscripts in chronological order. Current-work entries are placed after dated publications and should be updated once final venue, year, DOI, and BibTeX metadata are available.
 
-The timeline below summarizes the lineage of the repository and related works. Bibliographic entries are included from the project-maintainer supplied reference list. Current-work entries should be updated once final venue, year, DOI, and citation metadata are available.
+## Chronological Timeline
 
-## Timeline
+### 2023
 
-### Experimental Protocol And Search-Space Foundations
+- Garcia, J. L. L., Monroy, R., & Sosa Hernandez, V. A. (2023). An experimental protocol for neural architecture search in super-resolution. In *Proceedings of the IEEE/CVF International Conference on Computer Vision Workshops* (pp. 4139-4146).
 
-- **An experimental protocol for neural architecture search in super-resolution**  
-  J. L. García, R. Monroy, and V. A. S. Hernández.  
-  Proceedings of the IEEE/CVF International Conference on Computer Vision.
+### 2024
 
-- **Beyond performance: Designing a super-resolution architecture search space and a hybrid multi-objective approach for neural architecture optimization**  
-  J. L. García, R. Monroy, V. A. S. Hernández, and K. Deb.  
-  IEEE Access.
+- Sarmiento-Rosales, S., Garcia, J. L. L., Falcon-Cardona, J. G., Monroy, R., del Llano, M. I. C., & Sosa-Hernandez, V. A. (2024). Surrogate Modeling for Efficient Evolutionary Multi-Objective Neural Architecture Search in Super Resolution Image Restoration. In *IJCCI* (pp. 242-249).
 
-- **Neural architecture search for image super-resolution: A review on the emerging state-of-the-art**  
-  J. L. L. Garcia, R. Monroy, and V. A. S. Hernandez.  
-  Neurocomputing, 610, 128481.
+- Garcia, J. L. L., Monroy, R., & Sosa Hernandez, V. A. (2024). Neural architecture search for image super-resolution: A review on the emerging state-of-the-art. *Neurocomputing*, 610, 128481. https://doi.org/10.1016/j.neucom.2024.128481
 
-### Surrogate Modeling And Predictor-Based Search
+### 2025
 
-- **2024 - Surrogate modeling for efficient evolutionary multi-objective neural architecture search in super resolution image restoration**  
-  Sarmiento-Rosales, S., García, J. L. L., Falcón-Cardona, J. G., Monroy, R., del Llano, M. I. C., and Sosa-Hernández, V. A.  
-  In *IJCCI* (pp. 242-249).
+- Garcia, J. L. L., Monroy, R., Sosa Hernandez, V. A., & Deb, K. (2025). Beyond Performance: Designing a Super-Resolution Architecture Search Space and a Hybrid Multi-Objective Approach for Neural Architecture Optimization. *IEEE Access*, 13, 107187-107203. https://doi.org/10.1109/access.2025.3581919
 
-- **2025 - Comparative analysis of performance predictors in multi-objective neural architecture search for single image super-resolution: XGBoost regressor and SynFlow**  
-  Sarmiento-Rosales, S., Llano-García, J. L., Janssen, J. M., Falcón-Cardona, J. G., Monroy, R., and Sosa Hernández, V. A.  
-  In *International Joint Conference on Computational Intelligence* (pp. 52-71). Cham: Springer Nature Switzerland.
+- Sarmiento-Rosales, S., Llano-Garcia, J. L., Janssen, J. M., Falcon-Cardona, J. G., Monroy, R., & Sosa Hernandez, V. A. (2025, October). Comparative analysis of performance predictors in multi-objective neural architecture search for single image super-resolution: XGBoost regressor and SynFlow. In *International Joint Conference on Computational Intelligence* (pp. 52-71). Cham: Springer Nature Switzerland.
 
-- **2026 - Evolutionary Neural Architecture Search for Super-Resolution: Benchmarking SynFlow and model-based predictors**  
-  Sarmiento-Rosales, S., Hernández, V. A. S., and Monroy, R.  
-  *Swarm and Evolutionary Computation*, 100, 102236.
+### 2026
 
-### Current And Ongoing Work
+- Sarmiento-Rosales, S., Hernandez, V. A. S., & Monroy, R. (2026). Evolutionary Neural Architecture Search for Super-Resolution: Benchmarking SynFlow and model-based predictors. *Swarm and Evolutionary Computation*, 100, 102236.
 
-- **An Offline Analysis of Pareto Archiving Strategies in Multi-objective Neural Architecture Search for Super-Resolution Image Restoration: Toward Improved Post-Search Decision Making**  
-  Sergio Sarmiento-Rosales, Víctor Adrián Sosa Hernández, Raúl Monroy, and Gregorio Toscano Pulido.  
-  Current work.
+### Current Work
 
-- **Enhancing Mammography Restoration: A Multi-Objective Evolutionary Neural Architecture Search Approach**  
-  Ángel Alfonso Vázquez Piña, Sergio Sarmiento-Rosales, Víctor Adrián Sosa Hernández, and Raúl Monroy.  
-  Current work.
+- Sarmiento-Rosales, S., Sosa Hernandez, V. A., Monroy, R., & Toscano Pulido, G. An Offline Analysis of Pareto Archiving Strategies in Multi-objective Neural Architecture Search for Super-Resolution Image Restoration: Toward Improved Post-Search Decision Making. Current work.
 
-- **A Comparative Study of Evolutionary Multi-Objective Algorithms for Neural Architecture Search Solving Super-Resolution Image Restoration**  
-  Ángel Alfonso Vázquez Piña, Sergio Sarmiento-Rosales, Víctor Adrián Sosa Hernández, and Raúl Monroy.  
-  Current work.
+- Vazquez Pina, A. A., Sarmiento-Rosales, S., Sosa Hernandez, V. A., & Monroy, R. Enhancing Mammography Restoration: A Multi-Objective Evolutionary Neural Architecture Search Approach. Current work.
 
-- **Benchmarking Zero-Cost Performance Predictors for Neural Architecture Search in Super-Resolution Image Restoration**  
-  Sergio Sarmiento-Rosales, Ángel Alfonso Vázquez Piña, Víctor Adrián Sosa Hernández, and Raúl Monroy.  
-  Current work.
+- Vazquez Pina, A. A., Sarmiento-Rosales, S., Sosa Hernandez, V. A., & Monroy, R. A Comparative Study of Evolutionary Multi-Objective Algorithms for Neural Architecture Search Solving Super-Resolution Image Restoration. Current work.
 
-## Citation Guidance
+- Sarmiento-Rosales, S., Vazquez Pina, A. A., Sosa Hernandez, V. A., & Monroy, R. Benchmarking Zero-Cost Performance Predictors for Neural Architecture Search in Super-Resolution Image Restoration. Current work.
 
-If this repository is used for surrogate-based NAS experiments, cite the surrogate modeling and predictor-comparison papers. If it is used for zero-cost predictor benchmarking, cite the SynFlow/model-based predictor benchmarking work and the current zero-cost benchmark manuscript once public citation details are finalized.
+## Notes
 
-For search-space, protocol, and broader NAS-for-SRIR context, cite the experimental protocol, BASS/search-space, and review papers listed above.
+- Current-work entries are not final citations. Update author order, venue, year, DOI, and BibTeX when each manuscript is accepted or published.
+- Cite the specific work that matches the component used: experimental protocol, search space, review, surrogate modeling, predictor comparison, zero-cost benchmarking, Pareto archiving, evolutionary-algorithm comparison, or medical restoration.

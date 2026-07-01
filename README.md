@@ -161,20 +161,11 @@ Generated outputs should not be committed unless they are intentionally curated 
 
 ## Research Timeline And References
 
-This repository is part of a collaborative research line on NAS for super-resolution image restoration, BASS-style search spaces, surrogate modeling, zero-cost predictors, multi-objective search, Pareto archiving, and medical-image restoration.
-
-For the project lineage and full reference list, see [docs/research_timeline.md](docs/research_timeline.md).
-
-Key related works include:
-
-- Sarmiento-Rosales et al. (2024), surrogate modeling for evolutionary multi-objective NAS in SRIR.
-- Sarmiento-Rosales et al. (2025), comparative analysis of XGBoost and SynFlow predictors for multi-objective NAS in SISR.
-- Sarmiento-Rosales et al. (2026), benchmarking SynFlow and model-based predictors in *Swarm and Evolutionary Computation*.
-- García, Monroy, Hernández, and collaborators on NAS protocols, search spaces, and reviews for image super-resolution.
+See [docs/research_timeline.md](docs/research_timeline.md) for a chronological list of related publications and current manuscripts connected with this repository.
 
 ## Citation
 
-Please cite the related works listed in [docs/research_timeline.md](docs/research_timeline.md) according to the part of the repository you use. TODO: add the final BibTeX entry for the primary repository paper once the citation details are finalized.
+Please cite the specific work in [docs/research_timeline.md](docs/research_timeline.md) that matches the code, experiment, or benchmark you use. TODO: add final BibTeX entries when current manuscripts are published.
 
 ## Maintainer
 
