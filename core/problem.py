@@ -36,64 +36,118 @@ class NASProblem:
         self.use_obj_cache = use_obj_cache
         self.verbose_cache = verbose_cache
 
+        # decode cache: keyed by RAW bitstring
         self.decode_cache: dict[tuple[int, ...], list[int]] = {}
+
+        # all other caches: keyed by DECODED architecture
         self.score_cache: dict[tuple[int, ...], float] = {}
         self.param_cache: dict[tuple[int, ...], int] = {}
         self.obj_cache: dict[tuple[int, ...], list[float]] = {}
         self.evaluation_details_cache: dict[tuple[int, ...], dict[str, Any]] = {}
 
+        # real cache usage stats
+        self.cache_stats: dict[str, int] = {
+            "decode_hits": 0,
+            "decode_misses": 0,
+            "score_hits": 0,
+            "score_misses": 0,
+            "param_hits": 0,
+            "param_misses": 0,
+            "obj_hits": 0,
+            "obj_misses": 0,
+        }
+
     @staticmethod
-    def _normalize_ind(ind) -> tuple[int, ...]:
-        if isinstance(ind, np.ndarray):
-            return tuple(int(x) for x in ind.tolist())
-        return tuple(int(x) for x in ind)
+    def _normalize_seq(seq) -> tuple[int, ...]:
+        if isinstance(seq, np.ndarray):
+            return tuple(int(x) for x in seq.tolist())
+        return tuple(int(x) for x in seq)
+
+    def _raw_key(self, ind) -> tuple[int, ...]:
+        return self._normalize_seq(ind)
+
+    def _arch_key_from_decoded(
+        self, decoded_ind: list[int] | tuple[int, ...]
+    ) -> tuple[int, ...]:
+        return self._normalize_seq(decoded_ind)
 
     def _print_cache_hit(self, name: str) -> None:
         if self.verbose_cache:
             print(f"[CACHE HIT] {name}")
 
+    def _print_cache_miss(self, name: str) -> None:
+        if self.verbose_cache:
+            print(f"[CACHE MISS] {name}")
+
+    # ------------------------------------------------------------------
+    # Decode: expects RAW 84-bit individual
+    # ------------------------------------------------------------------
     def get_decoded_ind(self, ind) -> list[int]:
-        key = self._normalize_ind(ind)
+        raw_key = self._raw_key(ind)
 
-        if self.use_decode_cache and key in self.decode_cache:
+        if self.use_decode_cache and raw_key in self.decode_cache:
+            self.cache_stats["decode_hits"] += 1
             self._print_cache_hit("decode")
-            return self.decode_cache[key]
+            return self.decode_cache[raw_key]
 
-        decoded = bstr_to_rstr(list(key))
+        self.cache_stats["decode_misses"] += 1
+        self._print_cache_miss("decode")
+
+        decoded = bstr_to_rstr(list(raw_key))
 
         if self.use_decode_cache:
-            self.decode_cache[key] = decoded
+            self.decode_cache[raw_key] = decoded
 
         return decoded
 
-    def evaluate_primary_score(self, ind, n_eval: int) -> float:
-        key = self._normalize_ind(ind)
+    # ------------------------------------------------------------------
+    # Internal score evaluation: expects DECODED individual
+    # ------------------------------------------------------------------
+    def _evaluate_primary_score_from_decoded(
+        self, decoded_ind: list[int], n_eval: int
+    ) -> float:
+        arch_key = self._arch_key_from_decoded(decoded_ind)
 
-        if self.use_score_cache and key in self.score_cache:
+        if self.use_score_cache and arch_key in self.score_cache:
+            self.cache_stats["score_hits"] += 1
             self._print_cache_hit("score")
-            return self.score_cache[key]
+            return self.score_cache[arch_key]
 
-        decoded_ind = self.get_decoded_ind(ind)
+        self.cache_stats["score_misses"] += 1
+        self._print_cache_miss("score")
+
         result = self.evaluator.evaluate(decoded_ind, n_eval)
-
         score = float(result["score"])
 
         if self.use_score_cache:
-            self.score_cache[key] = score
-            self.evaluation_details_cache[key] = result.get("details", {})
+            self.score_cache[arch_key] = score
+            self.evaluation_details_cache[arch_key] = result.get("details", {})
 
         return score
 
-    def func_eval_params(self, ind, random_seed: int = 1) -> int:
-        key = self._normalize_ind(ind)
+    # public version: accepts RAW individual
+    def evaluate_primary_score(self, ind, n_eval: int) -> float:
+        decoded_ind = self.get_decoded_ind(ind)
+        return self._evaluate_primary_score_from_decoded(decoded_ind, n_eval)
 
-        if self.use_param_cache and key in self.param_cache:
+    # ------------------------------------------------------------------
+    # Internal param evaluation: expects DECODED individual
+    # Used as fallback when evaluator does not provide params directly
+    # ------------------------------------------------------------------
+    def _func_eval_params_from_decoded(
+        self, decoded_ind: list[int], random_seed: int = 1
+    ) -> int:
+        arch_key = self._arch_key_from_decoded(decoded_ind)
+
+        if self.use_param_cache and arch_key in self.param_cache:
+            self.cache_stats["param_hits"] += 1
             self._print_cache_hit("params")
-            return self.param_cache[key]
+            return self.param_cache[arch_key]
+
+        self.cache_stats["param_misses"] += 1
+        self._print_cache_miss("params")
 
         random.seed(random_seed)
-
-        decoded_ind = self.get_decoded_ind(ind)
         genotype = decode(decoded_ind)
 
         model = None
@@ -108,32 +162,66 @@ class NASProblem:
             tf.keras.backend.clear_session()
 
         if self.use_param_cache:
-            self.param_cache[key] = params
+            self.param_cache[arch_key] = params
 
         return params
 
+    # public version: accepts RAW individual
+    def func_eval_params(self, ind, random_seed: int = 1) -> int:
+        decoded_ind = self.get_decoded_ind(ind)
+        return self._func_eval_params_from_decoded(
+            decoded_ind, random_seed=random_seed
+        )
+
+    # ------------------------------------------------------------------
+    # Multi-objective evaluation: accepts RAW individual
+    # ------------------------------------------------------------------
     def _evaluate_multi(self, ind, n_eval: int) -> list[float]:
-        key = self._normalize_ind(ind)
+        decoded_ind = self.get_decoded_ind(ind)
+        arch_key = self._arch_key_from_decoded(decoded_ind)
 
-        if self.use_obj_cache and key in self.obj_cache:
+        if self.use_obj_cache and arch_key in self.obj_cache:
+            self.cache_stats["obj_hits"] += 1
             self._print_cache_hit("objectives")
-            return self.obj_cache[key]
+            return self.obj_cache[arch_key]
 
-        score = self.evaluate_primary_score(ind, n_eval)
-        params = self.func_eval_params(ind)
+        self.cache_stats["obj_misses"] += 1
+        self._print_cache_miss("objectives")
+
+        # Fast path: zero-cost evaluator can return score + params
+        if hasattr(self.evaluator, "evaluate_with_params"):
+            result = self.evaluator.evaluate_with_params(decoded_ind, n_eval)
+            score = float(result["score"])
+            params = int(result["params"])
+
+            if self.use_score_cache:
+                self.score_cache[arch_key] = score
+                self.evaluation_details_cache[arch_key] = result.get("details", {})
+
+            if self.use_param_cache:
+                self.param_cache[arch_key] = params
+
+        # Fallback path: generic evaluator API
+        else:
+            score = self._evaluate_primary_score_from_decoded(decoded_ind, n_eval)
+            params = self._func_eval_params_from_decoded(decoded_ind)
 
         objectives = [-float(score), int(params)]
 
         if self.use_obj_cache:
-            self.obj_cache[key] = objectives
+            self.obj_cache[arch_key] = objectives
 
         return objectives
 
+    # ------------------------------------------------------------------
+    # Cache summary
+    # ------------------------------------------------------------------
     def get_cache_summary(self) -> dict[str, int]:
         return {
-            "decode_cache": len(self.decode_cache),
-            "score_cache": len(self.score_cache),
-            "param_cache": len(self.param_cache),
-            "obj_cache": len(self.obj_cache),
-            "evaluation_details_cache": len(self.evaluation_details_cache),
+            **self.cache_stats,
+            "decode_cache_size": len(self.decode_cache),
+            "score_cache_size": len(self.score_cache),
+            "param_cache_size": len(self.param_cache),
+            "obj_cache_size": len(self.obj_cache),
+            "evaluation_details_cache_size": len(self.evaluation_details_cache),
         }

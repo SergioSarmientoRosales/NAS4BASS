@@ -1,34 +1,58 @@
-# Python
+# Python bytecode and build artifacts
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
 *.egg-info/
+build/
+dist/
+
+# Virtual environments
 .venv/
 venv/
 env/
+ENV/
 
 # Jupyter
 .ipynb_checkpoints/
 
-# IDE / OS
-.vscode/
+# IDE and OS files
 .idea/
+.vscode/
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs and temporary files
 *.log
+*.tmp
+*.bak
+*.swp
 
-# Model artifacts
-*.h5
+# Experiment outputs and generated results
+outputs/
+results/
+runs/
+logs/
+checkpoints/
+data/zero_cost_benchmark_outputs_paper_only/
+
+# Trained neural-network checkpoints and export formats
 *.keras
+*.h5
 *.ckpt
 *.pb
 *.tflite
 *.onnx
+data/trained_models/
 
-# Temporary results / caches
-outputs/tmp/
-results/tmp/
-checkpoints/
+# Pickle files are usually large artifacts.
+# The repository intentionally keeps surrogate models under models/.
+*.pkl
+!models/
+!models/*.pkl
+
+# Local secrets or machine-specific configuration
+.env
+.env.*
+secrets.*
+credentials.*
+local_config.*

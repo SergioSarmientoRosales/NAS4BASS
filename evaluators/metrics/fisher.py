@@ -1,221 +1,308 @@
-# Copyright 2021 Samsung Electronics Co., Ltd.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# =============================================================================
-
-
-# Super-Resolution zero-cost proxy inspired by the Fisher pruning criterion.
-#
-# The original implementation estimates per-channel Fisher statistics by
-# registering backward hooks on nn.Identity dummy operators inserted after
-# Conv2d / Linear layers. This provides access to both the activation and
-# its gradient at the same point in the computational graph.
-#
-# TensorFlow/Keras does not provide an equally simple, non-intrusive, and
-# model-agnostic mechanism for reproducing that exact hook-based workflow:
-#
-#   - Wrapping layer.__call__ is fragile and can interfere with Keras internals.
-#   - layer.output is limited to graph-compatible Functional models.
-#   - Intrusive alternatives modify the model behaviour or training objective.
-#
-# For this reason, this adaptation uses a weight-based diagonal Fisher
-# approximation computed from gradients with respect to kernel tensors.
-# Although this is not algebraically identical to the original activation-
-# based formulation, it captures a closely related notion of sensitivity:
-# how strongly a layer's parameters participate in the mapping induced by
-# the chosen surrogate objective.
-#
-# Correspondence with the original:
-#
-#   Original (activation-based)           This adaptation (weight-based)
-#   ─────────────────────────────         ────────────────────────────────
-#   hook captures act, grad_act           tape.gradient(obj, layer.kernel)
-#   Fisher accumulated per sub-batch      Fisher accumulated per sub-batch
-#   training-time forward pass            training-time forward pass
-#   supervised loss(outputs, targets)     target-free surrogate objective
-#   per-channel importance                per-layer scalar importance
-#   final downstream aggregation          mean over layers
-
-
 from __future__ import annotations
 
-import numpy as np
 import tensorflow as tf
 
 
-def _collect_target_layers(
+def _collect_target_layers(model: tf.keras.Model):
+    """
+    Minimal target-layer collector for Fisher.
+
+    Covers the layers that matter in the SR search space:
+    - Conv2D              -> kernel
+    - Conv2DTranspose     -> kernel
+    - DepthwiseConv2D     -> depthwise_kernel
+    - Dense               -> kernel
+    """
+    layers_iter = (
+        model._flatten_layers(include_self=False, recursive=True)
+        if hasattr(model, "_flatten_layers")
+        else model.layers
+    )
+
+    items = []
+    seen = set()
+
+    for layer in layers_iter:
+        candidates = []
+
+        if isinstance(layer, tf.keras.layers.Conv2D):
+            candidates.append(("Conv2D", layer, "kernel", getattr(layer, "kernel", None)))
+        elif isinstance(layer, tf.keras.layers.Conv2DTranspose):
+            candidates.append(("Conv2DTranspose", layer, "kernel", getattr(layer, "kernel", None)))
+        elif isinstance(layer, tf.keras.layers.DepthwiseConv2D):
+            candidates.append(("DepthwiseConv2D", layer, "depthwise_kernel", getattr(layer, "depthwise_kernel", None)))
+        elif isinstance(layer, tf.keras.layers.Dense):
+            candidates.append(("Dense", layer, "kernel", getattr(layer, "kernel", None)))
+
+        for layer_type, layer_obj, weight_name, var in candidates:
+            if var is None:
+                continue
+
+            key = getattr(var, "path", None) or getattr(var, "name", None) or str(id(var))
+            if key in seen:
+                continue
+            seen.add(key)
+
+            items.append((layer_type, layer_obj, weight_name))
+
+    return items
+
+
+def _make_dummy_sr_batch(
+    batch_size: int,
+    input_shape: tuple[int, int, int],
+    upscale_factor: int = 2,
+    dtype: tf.dtypes.DType = tf.float32,
+):
+    h, w, c = input_shape
+    hr_h = h * upscale_factor
+    hr_w = w * upscale_factor
+
+    lr = tf.random.uniform(
+        shape=(batch_size, h, w, c),
+        minval=0.0,
+        maxval=1.0,
+        dtype=dtype,
+    )
+    hr = tf.random.uniform(
+        shape=(batch_size, hr_h, hr_w, c),
+        minval=0.0,
+        maxval=1.0,
+        dtype=dtype,
+    )
+    return lr, hr
+
+
+def _default_sr_loss():
+    return tf.keras.losses.MeanSquaredError()
+
+
+def _resolve_fisher_context(
     model: tf.keras.Model,
-) -> list[tf.keras.layers.Layer]:
+    inputs: tf.Tensor | None = None,
+    targets: tf.Tensor | None = None,
+    loss_fn=None,
+    input_shape: tuple[int, int, int] | None = None,
+    batch_size: int | None = None,
+    upscale_factor: int = 2,
+):
     """
-    Collect layers whose kernel weights will be used for Fisher estimation.
+    Resolve a supervised SR context for Fisher.
 
-    This mirrors the Conv2d / Linear targeting logic used in the original
-    implementation, adapted here to TensorFlow/Keras layers that expose a
-    `kernel` attribute, such as Conv2D and Dense.
-
-    Parameters
-    ----------
-    model : tf.keras.Model
-        Candidate architecture.
-
-    Returns
-    -------
-    list[tf.keras.layers.Layer]
-        Ordered list of scoreable layers.
+    Priority:
+    1) Use explicit (inputs, targets, loss_fn) if provided
+    2) Otherwise create a synthetic SR batch from (input_shape, batch_size)
     """
-    return [
-        layer
-        for layer in model.layers
-        if hasattr(layer, "kernel") and layer.kernel is not None
-    ]
+    if inputs is not None:
+        if targets is None:
+            raise ValueError("targets must be provided when inputs are provided.")
+        if loss_fn is None:
+            raise ValueError("loss_fn must be provided when inputs are provided.")
+
+        if not model.built:
+            _ = model(inputs[:1], training=False)
+
+        return inputs, targets, loss_fn
+
+    if input_shape is None or batch_size is None:
+        raise ValueError(
+            "Either (inputs, targets, loss_fn) or (input_shape, batch_size) must be provided."
+        )
+
+    dummy_inputs, dummy_targets = _make_dummy_sr_batch(
+        batch_size=batch_size,
+        input_shape=input_shape,
+        upscale_factor=upscale_factor,
+    )
+    dummy_loss = _default_sr_loss()
+
+    if not model.built:
+        _ = model(dummy_inputs[:1], training=False)
+
+    return dummy_inputs, dummy_targets, dummy_loss
 
 
-def _compute_weight_fisher(grad_w: tf.Tensor) -> tf.Tensor:
+def _reduce_fisher_channel_metric(act: tf.Tensor, grad: tf.Tensor) -> tf.Tensor:
     """
-    Compute a scalar diagonal Fisher approximation from a kernel gradient.
+    TensorFlow equivalent of the original PyTorch Fisher block:
 
-    The original activation-based formulation computes Fisher-style importance
-    from activation-gradient interactions. In this TensorFlow/Keras SR
-    adaptation, the score is computed directly in weight space as:
+        if len(act.shape) > 2:
+            g_nk = torch.sum((act * grad), dims_spatial)
+        else:
+            g_nk = act * grad
+        del_k = 0.5 * mean(g_nk^2, axis=0)
 
-        fisher_w = 0.5 * mean(grad_w^2)
-
-    This yields a diagonal Fisher-inspired sensitivity estimate for the layer
-    without requiring explicit activation capture.
-
-    Parameters
-    ----------
-    grad_w : tf.Tensor
-        Gradient of the surrogate objective with respect to a layer kernel.
-        Typical shapes include:
-        - [H, W, C_in, C_out] for Conv2D
-        - [C_in, C_out] for Dense
-
-    Returns
-    -------
-    tf.Tensor
-        Scalar Fisher mass for the layer.
+    Assumes channels-last tensors.
     """
-    fisher = 0.5 * tf.reduce_mean(tf.square(grad_w))
-    return tf.abs(fisher)
+    act = tf.cast(act, tf.float32)
+    grad = tf.cast(grad, tf.float32)
+
+    prod = act * grad
+
+    if prod.shape.rank is None:
+        raise ValueError("Activation rank must be known for Fisher computation.")
+
+    if prod.shape.rank > 2:
+        spatial_axes = list(range(1, prod.shape.rank - 1))
+        g_nk = tf.reduce_sum(prod, axis=spatial_axes)
+    else:
+        g_nk = prod
+
+    return 0.5 * tf.reduce_mean(tf.square(g_nk), axis=0)
+
+
+def _broadcast_channel_metric(layer_type: str, channel_metric: tf.Tensor, kernel: tf.Tensor) -> tf.Tensor:
+    """
+    Broadcast channel Fisher values back to full weight tensor shape.
+    """
+    channel_metric = tf.cast(channel_metric, tf.float32)
+
+    if layer_type == "Conv2D":
+        return tf.broadcast_to(tf.reshape(channel_metric, [1, 1, 1, -1]), tf.shape(kernel))
+
+    if layer_type == "Conv2DTranspose":
+        return tf.broadcast_to(tf.reshape(channel_metric, [1, 1, -1, 1]), tf.shape(kernel))
+
+    if layer_type == "Dense":
+        return tf.broadcast_to(tf.reshape(channel_metric, [1, -1]), tf.shape(kernel))
+
+    if layer_type == "DepthwiseConv2D":
+        in_ch = int(kernel.shape[-2])
+        depth_multiplier = int(kernel.shape[-1])
+        expected = in_ch * depth_multiplier
+
+        if int(channel_metric.shape[0]) != expected:
+            raise ValueError(
+                f"Depthwise Fisher metric length {int(channel_metric.shape[0])} "
+                f"does not match expected {expected}."
+            )
+
+        return tf.broadcast_to(
+            tf.reshape(channel_metric, [1, 1, in_ch, depth_multiplier]),
+            tf.shape(kernel),
+        )
+
+    raise ValueError(f"Unsupported layer type: {layer_type}")
+
+
+def compute_fisher_per_weight(
+    model: tf.keras.Model,
+    inputs: tf.Tensor | None = None,
+    targets: tf.Tensor | None = None,
+    loss_fn=None,
+    split_data: int = 1,
+    input_shape: tuple[int, int, int] | None = None,
+    batch_size: int | None = None,
+    upscale_factor: int = 2,
+):
+    """
+    TensorFlow/Keras Fisher adaptation with dual compatibility:
+    - benchmark mode: explicit inputs/targets/loss_fn
+    - modular NAS mode: input_shape + batch_size
+    """
+    if split_data < 1:
+        raise ValueError("split_data must be >= 1.")
+
+    inputs, targets, loss_fn = _resolve_fisher_context(
+        model=model,
+        inputs=inputs,
+        targets=targets,
+        loss_fn=loss_fn,
+        input_shape=input_shape,
+        batch_size=batch_size,
+        upscale_factor=upscale_factor,
+    )
+
+    target_layers = _collect_target_layers(model)
+    if not target_layers:
+        return []
+
+    if not hasattr(model, "inputs") or model.inputs is None:
+        raise ValueError("Fisher requires a Keras model with accessible model.inputs/model.output.")
+
+    activation_model = tf.keras.Model(
+        inputs=model.inputs,
+        outputs=[layer.output for _, layer, _ in target_layers] + [model.output],
+    )
+
+    fisher_accum = {}
+    N = int(inputs.shape[0])
+
+    for sp in range(split_data):
+        st = sp * N // split_data
+        en = (sp + 1) * N // split_data
+
+        x = inputs[st:en]
+        y = targets[st:en]
+
+        if x.shape[0] == 0:
+            continue
+
+        with tf.GradientTape(persistent=True) as tape:
+            outputs = activation_model(x, training=True)
+            activations = outputs[:-1]
+            final_output = outputs[-1]
+
+            loss = loss_fn(y, final_output)
+            loss = tf.reduce_mean(tf.cast(loss, tf.float32))
+
+        for (layer_type, layer, weight_name), act in zip(target_layers, activations):
+            grad = tape.gradient(loss, act)
+            if grad is None:
+                continue
+
+            del_k = _reduce_fisher_channel_metric(act, grad)
+
+            if layer.name in fisher_accum:
+                fisher_accum[layer.name] = fisher_accum[layer.name] + del_k
+            else:
+                fisher_accum[layer.name] = del_k
+
+        del tape
+
+    per_weight = []
+    for layer_type, layer, weight_name in target_layers:
+        kernel = getattr(layer, weight_name)
+
+        if layer.name not in fisher_accum:
+            per_weight.append(tf.zeros_like(kernel, dtype=tf.float32))
+            continue
+
+        channel_metric = tf.abs(fisher_accum[layer.name])
+        per_weight.append(_broadcast_channel_metric(layer_type, channel_metric, kernel))
+
+    return per_weight
 
 
 def compute_fisher(
     model: tf.keras.Model,
-    input_shape: tuple[int, int, int] = (64, 64, 3),
-    batch_size: int = 32,
+    inputs: tf.Tensor | None = None,
+    targets: tf.Tensor | None = None,
+    loss_fn=None,
     split_data: int = 1,
+    input_shape: tuple[int, int, int] | None = None,
+    batch_size: int | None = None,
+    upscale_factor: int = 2,
 ) -> float:
     """
-    Compute an SR-oriented Fisher-inspired zero-cost proxy.
-
-    The procedure preserves the overall accumulation logic of the original
-    Fisher implementation where feasible within TensorFlow/Keras:
-
-      1. Generate a synthetic input batch.
-      2. Split the batch into `split_data` sub-batches.
-      3. For each sub-batch:
-           a. run a forward pass with training=True,
-           b. define a lightweight surrogate scalar objective,
-           c. compute gradients with respect to layer kernels,
-           d. accumulate diagonal Fisher-style layer sensitivities.
-      4. Return the mean accumulated Fisher mass across contributing layers.
-
-    Because this is a target-free SR zero-cost proxy, the supervised loss from
-    the original implementation is replaced by a simple differentiable
-    surrogate:
-
-        scalar_objective = tf.reduce_sum(model(x))
-
-    This surrogate is not intended to represent reconstruction quality
-    directly; it is used only to probe sensitivity in a lightweight and
-    architecture-agnostic way.
-
-    Parameters
-    ----------
-    model : tf.keras.Model
-        Candidate architecture to evaluate.
-    input_shape : tuple[int, int, int], default=(64, 64, 3)
-        LR input shape (H, W, C).
-    batch_size : int, default=32
-        Total number of synthetic samples used to estimate the proxy.
-    split_data : int, default=1
-        Number of sub-batches used for accumulation. Increasing this value can
-        reduce peak memory usage when batch_size is large.
-
-    Returns
-    -------
-    float
-        Mean Fisher-inspired mass across contributing layers. Higher values
-        indicate stronger aggregate weight sensitivity under the surrogate
-        objective. Returns np.nan if no valid gradients can be computed.
+    Scalar Fisher score, compatible with:
+    - benchmark mode
+    - modular NAS mode
     """
-    if batch_size < 1:
-        raise ValueError("batch_size must be >= 1.")
-    if split_data < 1:
-        raise ValueError("split_data must be >= 1.")
+    per_weight = compute_fisher_per_weight(
+        model=model,
+        inputs=inputs,
+        targets=targets,
+        loss_fn=loss_fn,
+        split_data=split_data,
+        input_shape=input_shape,
+        batch_size=batch_size,
+        upscale_factor=upscale_factor,
+    )
 
-    dummy_inputs = tf.random.normal((batch_size,) + input_shape, dtype=tf.float32)
-
-    # Ensure variables exist before gradient computation.
-    if not model.built:
-        _ = model(dummy_inputs[:1], training=False)
-
-    target_layers = _collect_target_layers(model)
-    if not target_layers:
+    if not per_weight:
         return 0.0
 
-    layer_fisher: dict[str, tf.Tensor] = {}
-
-    try:
-        n_samples = batch_size
-
-        for sp in range(split_data):
-            st = sp * n_samples // split_data
-            en = (sp + 1) * n_samples // split_data
-            sub_inputs = dummy_inputs[st:en]
-
-            kernel_vars = [layer.kernel for layer in target_layers]
-
-            with tf.GradientTape() as tape:
-                # training=True is used to remain closer to the original Fisher
-                # workflow, which evaluates the network in training mode.
-                final_output = model(sub_inputs, training=True)
-
-                # Lightweight SR surrogate objective.
-                scalar_objective = tf.reduce_sum(final_output)
-
-            grads = tape.gradient(scalar_objective, kernel_vars)
-
-            for layer, grad_w in zip(target_layers, grads):
-                if grad_w is None:
-                    # Skip disconnected or non-contributing layers.
-                    continue
-
-                fisher_val = _compute_weight_fisher(grad_w)
-
-                if layer.name in layer_fisher:
-                    layer_fisher[layer.name] = layer_fisher[layer.name] + fisher_val
-                else:
-                    layer_fisher[layer.name] = fisher_val
-
-        if not layer_fisher:
-            return float(np.nan)
-
-        # Mean over layers to avoid trivially favouring deeper architectures
-        # through raw accumulation alone.
-        layer_scores = [float(v.numpy()) for v in layer_fisher.values()]
-        return float(np.mean(layer_scores))
-
-    except Exception:
-        return float(np.nan)
+    return float(
+        tf.add_n([tf.reduce_sum(tf.abs(t)) for t in per_weight]).numpy()
+    )

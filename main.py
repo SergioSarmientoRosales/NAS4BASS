@@ -6,7 +6,7 @@ import time
 import argparse
 from datetime import datetime
 
-from config import DEFAULT_POP_SIZE, DEFAULT_N_GEN, DEFAULT_ENSEMBLE_METHOD
+from config import DEFAULT_POP_SIZE, DEFAULT_ENSEMBLE_METHOD
 from utils.seed import set_global_seed
 
 from core.problem import NASProblem
@@ -49,7 +49,7 @@ def discover_models(models_dir: str = "models") -> list[str]:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Run NSGA-III locally with modular model-based evaluation"
+        description="Run NAS locally with modular evaluation backends"
     )
 
     parser.add_argument("--seed", type=int, default=1, help="Random seed")
@@ -104,11 +104,44 @@ def parse_args():
         help="Zero-cost metric name",
     )
 
+    parser.add_argument(
+        "--save-flush-every",
+        type=int,
+        default=100,
+        help="Flush population history to disk every N generations/steps. Use 1 to mimic current behavior.",
+    )
+
+    parser.add_argument(
+        "--n-gen",
+        type=int,
+        default=None,
+        help="Maximum number of generations. Optional when --early-stop is enabled.",
+    )
+
+    parser.add_argument(
+        "--early-stop",
+        action="store_true",
+        help="Enable early stopping based on exact population repetition.",
+    )
+
+    parser.add_argument(
+        "--early-stop-min-gen",
+        type=int,
+        default=200,
+        help="Minimum number of generations before checking early stop.",
+    )
+
+    parser.add_argument(
+        "--early-stop-repeat-patience",
+        type=int,
+        default=10,
+        help="Stop if the population repeats exactly for this many consecutive generations.",
+    )
+
     parser.add_argument("--outdir", type=str, default="outputs", help="Output directory")
     parser.add_argument("--pop-size", type=int, default=DEFAULT_POP_SIZE, help="Population size")
-    parser.add_argument("--n-gen", type=int, default=DEFAULT_N_GEN, help="Number of generations")
 
-    parser.add_argument("--verbose", action="store_true", help="Enable NSGA-III progress bar")
+    parser.add_argument("--verbose", action="store_true", help="Enable progress bar")
     parser.add_argument("--verbose-cache", action="store_true", help="Print cache hits")
 
     parser.add_argument("--disable-decode-cache", action="store_true", help="Disable decode cache")
@@ -130,8 +163,6 @@ def resolve_model_paths(args) -> list[str]:
 
 
 def save_non_dominated_solutions(nds: dict, problem, filepath: str) -> None:
-    import csv
-
     with open(filepath, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
 
@@ -155,7 +186,14 @@ def save_non_dominated_solutions(nds: dict, problem, filepath: str) -> None:
 
             writer.writerow(row)
 
-def print_run_configuration(args, model_paths: list[str], selected_models: list[str] | None, seed_folder: str, output_file: str) -> None:
+
+def print_run_configuration(
+    args,
+    model_paths: list[str],
+    selected_models: list[str] | None,
+    seed_folder: str,
+    output_file: str,
+) -> None:
     print("=" * 80)
     print("[INFO] Modular NAS local run configuration")
     print("=" * 80)
@@ -163,7 +201,11 @@ def print_run_configuration(args, model_paths: list[str], selected_models: list[
     print(f"[INFO] Output folder: {seed_folder}")
     print(f"[INFO] Output file: {output_file}")
     print(f"[INFO] Population size: {args.pop_size}")
-    print(f"[INFO] Generations: {args.n_gen}")
+    print(f"[INFO] Max generations: {args.n_gen}")
+    print(f"[INFO] Early stop enabled: {args.early_stop}")
+    print(f"[INFO] Early stop min gen: {args.early_stop_min_gen}")
+    print(f"[INFO] Early stop repeat patience: {args.early_stop_repeat_patience}")
+    print(f"[INFO] Save flush every: {args.save_flush_every}")
     print(f"[INFO] Ensemble method: {args.ensemble_method}")
     print(f"[INFO] Verbose progress: {args.verbose}")
     print(f"[INFO] Verbose cache: {args.verbose_cache}")
@@ -172,11 +214,11 @@ def print_run_configuration(args, model_paths: list[str], selected_models: list[
     print(f"[INFO] Parameter cache enabled: {not args.disable_param_cache}")
     print(f"[INFO] Objective cache enabled: {not args.disable_obj_cache}")
     print(f"[INFO] Selected models: {selected_models if selected_models is not None else 'ALL'}")
-    print("[INFO] Model paths:")
     print(f"[INFO] Evaluation method: {args.eval}")
     if args.eval == "zero_cost":
         print(f"[INFO] Zero-cost metric: {args.zc_metric}")
     print(f"[INFO] Search method: {args.search}")
+    print("[INFO] Model paths:")
     for p in model_paths:
         print(f"  - {p}")
 
@@ -202,6 +244,11 @@ def main():
     start = time.time()
     args = parse_args()
 
+    if not args.early_stop and args.n_gen is None:
+        raise ValueError(
+            "You must provide --n-gen when --early-stop is disabled."
+        )
+
     set_global_seed(args.seed)
 
     if args.eval == "model_based":
@@ -219,8 +266,10 @@ def main():
         )
 
     if args.ensemble_method != "weighted_mean" and ensemble_weights is not None:
-        print("[WARNING] Ensemble weights were provided but will be ignored because "
-              "ensemble method is not 'weighted_mean'.")
+        print(
+            "[WARNING] Ensemble weights were provided but will be ignored because "
+            "ensemble method is not 'weighted_mean'."
+        )
 
     os.makedirs(args.outdir, exist_ok=True)
     seed_folder = os.path.join(args.outdir, f"seed_{args.seed}")
@@ -239,7 +288,6 @@ def main():
 
     print_run_configuration(args, model_paths, selected_models, seed_folder, output_file)
 
-    # 1) Build evaluator
     evaluator = build_evaluator(
         eval_name=args.eval,
         model_paths=model_paths if args.eval == "model_based" else None,
@@ -250,7 +298,6 @@ def main():
         verbose=True,
     )
 
-    # 2) Build problem
     problem = NASProblem(
         evaluator=evaluator,
         n_var=84,
@@ -269,6 +316,10 @@ def main():
         n_gen=args.n_gen,
         verbose=args.verbose,
         output_file=output_file,
+        save_flush_every=args.save_flush_every,
+        early_stop=args.early_stop,
+        early_stop_min_gen=args.early_stop_min_gen,
+        early_stop_repeat_patience=args.early_stop_repeat_patience,
     )
 
     final_population, non_dominated_solutions = search_method()
@@ -296,6 +347,10 @@ def main():
         "selected_models": ",".join(selected_models) if selected_models is not None else "ALL",
         "pop_size": args.pop_size,
         "n_gen": args.n_gen,
+        "early_stop": args.early_stop,
+        "early_stop_min_gen": args.early_stop_min_gen,
+        "early_stop_repeat_patience": args.early_stop_repeat_patience,
+        "save_flush_every": args.save_flush_every,
         "final_population_size": len(final_population["X"]),
         "non_dominated_count": len(non_dominated_solutions["X"]),
         "runtime_minutes": runtime_minutes,
@@ -305,10 +360,6 @@ def main():
     save_run_summary(run_summary, cache_summary_file)
     print(f"\n[INFO] Run summary saved to: {cache_summary_file}")
     print(f"[INFO] Total runtime: {runtime_minutes:.2f} minutes")
-    print(f"\n[INFO] Cache summary saved to: {cache_summary_file}")
-
-    end = time.time()
-    print(f"[INFO] Total runtime: {(end - start) / 60:.2f} minutes")
 
     nds_file = os.path.join(
         seed_folder,
@@ -322,6 +373,7 @@ def main():
     )
 
     print(f"[INFO] Non-dominated solutions saved to: {nds_file}")
+
 
 if __name__ == "__main__":
     main()

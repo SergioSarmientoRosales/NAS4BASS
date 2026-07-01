@@ -7,19 +7,42 @@ from tqdm import tqdm
 from search.operators import TournamentSelection, KPointBinaryCrossover, BitFlipMutation
 from search.base import BaseSearch
 
+
 class ReferencePoint:
     def __init__(self, position):
         self.position = position
 
 
 class NSGA3(BaseSearch):
-    def __init__(self, pop_size=100, n_gen=1000, problem=None, verbose=False, output_file=None):
-        self.problem = problem
-        self.pop_size = pop_size
-        self.n_gen = n_gen
-        self.verbose = verbose
+    def __init__(
+            self,
+            pop_size=100,
+            n_gen=None,
+            problem=None,
+            verbose=False,
+            output_file=None,
+            save_flush_every: int = 100,
+            early_stop: bool = False,
+            early_stop_min_gen: int = 200,
+            early_stop_repeat_patience: int = 10,
+    ):
+        super().__init__(
+            problem=problem,
+            pop_size=pop_size,
+            n_gen=n_gen,
+            verbose=verbose,
+            output_file=output_file,
+            save_flush_every=save_flush_every,
+            early_stop=early_stop,
+            early_stop_min_gen=early_stop_min_gen,
+            early_stop_repeat_patience=early_stop_repeat_patience,
+        )
         self.n_eval = 1
-        self.output_file = output_file
+        self._history_buffer = []
+        self._header_written = False
+
+        self._last_population_signature = None
+        self._same_population_count = 0
 
     @staticmethod
     def _dominate(p, q):
@@ -174,9 +197,6 @@ class NSGA3(BaseSearch):
         return a
 
     def _niching(self, l_front, niche, a, pop_index):
-        """
-        Robust niching: never appends None and safely handles empty candidate sets.
-        """
         k = self.pop_size - len(pop_index)
         count = 0
         remaining = list(l_front)
@@ -235,8 +255,27 @@ class NSGA3(BaseSearch):
                 indexes.append(i)
         return indexes
 
-    def _save_population(self, pop, generation: int):
+    def _population_signature(self, pop):
+        return tuple(
+            sorted(tuple(self.problem.get_decoded_ind(x)) for x in pop["X"])
+        )
+
+    def _append_population_to_buffer(self, pop, generation: int):
         if not self.output_file:
+            return
+
+        for idx, (x, obj) in enumerate(zip(pop["X"], pop["F"])):
+            decoded_arch = self.problem.get_decoded_ind(x)
+            self._history_buffer.append([
+                generation,
+                idx,
+                " ".join(map(str, decoded_arch)),
+                float(obj[0]),
+                int(obj[1]),
+            ])
+
+    def _flush_population_buffer(self):
+        if not self.output_file or not self._history_buffer:
             return
 
         file_exists = os.path.exists(self.output_file)
@@ -244,7 +283,7 @@ class NSGA3(BaseSearch):
         with open(self.output_file, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
 
-            if not file_exists:
+            if not file_exists or not self._header_written:
                 writer.writerow([
                     "generation",
                     "individual_id",
@@ -252,70 +291,51 @@ class NSGA3(BaseSearch):
                     "predicted_psnr",
                     "params",
                 ])
+                self._header_written = True
 
-            for idx, (x, obj) in enumerate(zip(pop["X"], pop["F"])):
-                decoded_arch = self.problem.get_decoded_ind(x)
+            writer.writerows(self._history_buffer)
 
-                writer.writerow([
-                    generation,
-                    idx,
-                    " ".join(map(str, decoded_arch)),
-                    float(obj[0]),
-                    int(obj[1]),
-                ])
+        self._history_buffer = []
 
     def _do(self):
         c = 0
         nds = {}
         self.ref_points = self._weights_vector()
         pop = self._initialize_pop()
-        self._save_population(pop, generation=0)
+        self._append_population_to_buffer(pop, generation=0)
 
         pbar = tqdm(total=self.n_gen, desc="NSGA-III Progress", unit="gen") if self.verbose else None
 
-        while c < self.n_gen:
+        while self.n_gen is None or c < self.n_gen:
             q_pop = self._generate_q(pop)
 
-            # Union between P and Q
             r_pop = {}
             for key in pop.keys():
                 r_pop[key] = pop[key] + q_pop[key]
 
-            # Fast non-dominated sorting
             fronts = self._fast_non_dominated_sorting(r_pop)
 
-            # Select fronts until reaching or exceeding pop_size
             s, f = [], 0
             while len(s) < self.pop_size:
                 f += 1
                 for x in fronts[f"F{f}"]:
                     s.append(x)
 
-            # Case 1: exact size
             if len(s) == self.pop_size:
                 for key in r_pop.keys():
                     pop[key] = [r_pop[key][index] for index in s]
-
-            # Case 2: need niching from last front
             else:
                 pop_index = [item for j in range(1, f) for item in fronts[f"F{j}"]]
                 last_front = fronts[f"F{f}"].copy()
 
-                # Normalize selected individuals
                 normal = self._normalize(s, r_pop["F"])
-
-                # Associate each member of s with a reference point
                 a = self._associate(normal)
 
-                # Compute niche count
                 niche_c = {key: 0 for key in self.ref_points}
                 for index in pop_index:
                     niche_c[a[f"{index}"][1]] += 1
 
-                # Niching selection
                 pop_index = self._niching(last_front, niche_c, a, pop_index)
-
-                # Safety filter
                 pop_index = [i for i in pop_index if i is not None]
 
                 if len(pop_index) != self.pop_size:
@@ -326,19 +346,40 @@ class NSGA3(BaseSearch):
                 for key in pop.keys():
                     pop[key] = [r_pop[key][i] for i in pop_index]
 
-            # Obtain non-dominated solutions in current population
             nds_index = self._non_dominated_samples(pop)
             for key in pop.keys():
                 nds[key] = [pop[key][index] for index in nds_index]
 
             c += 1
-            self._save_population(pop, generation=c)
+            self._append_population_to_buffer(pop, generation=c)
+
+            if self.save_flush_every > 0 and c % self.save_flush_every == 0:
+                self._flush_population_buffer()
+
+            if self.early_stop and c >= self.early_stop_min_gen:
+                current_signature = self._population_signature(pop)
+
+                if current_signature == self._last_population_signature:
+                    self._same_population_count += 1
+                else:
+                    self._same_population_count = 0
+
+                self._last_population_signature = current_signature
+
+                if self._same_population_count >= self.early_stop_repeat_patience:
+                    print(
+                        f"[INFO] Early stop triggered at generation {c} "
+                        f"after {self.early_stop_repeat_patience} consecutive identical populations."
+                    )
+                    break
 
             if pbar is not None:
                 pbar.update(1)
 
         if pbar is not None:
             pbar.close()
+
+        self._flush_population_buffer()
 
         return pop, nds
 

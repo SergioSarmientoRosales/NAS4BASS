@@ -22,9 +22,13 @@ def build_search_method(
     name: str,
     problem,
     pop_size: int,
-    n_gen: int,
+    n_gen: int | None,
     verbose: bool = False,
     output_file: str | None = None,
+    save_flush_every: int = 100,
+    early_stop: bool = False,
+    early_stop_min_gen: int = 200,
+    early_stop_repeat_patience: int = 10,
 ):
     name = name.lower()
 
@@ -42,6 +46,10 @@ def build_search_method(
         n_gen=n_gen,
         verbose=verbose,
         output_file=output_file,
+        save_flush_every=save_flush_every,
+        early_stop=early_stop,
+        early_stop_min_gen=early_stop_min_gen,
+        early_stop_repeat_patience=early_stop_repeat_patience,
     )
 
 
