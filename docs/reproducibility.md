@@ -7,6 +7,7 @@ This repository is organized so that a new user can run small smoke tests and re
 - Python detected locally: 3.12.2
 - Main framework: TensorFlow/Keras
 - Surrogate model ecosystem: scikit-learn, XGBoost, joblib
+- Important dependency constraint: use `numpy>=1.26,<2.0` with the pinned TensorFlow 2.16.x stack.
 
 TODO: add exact operating system, GPU, CUDA, cuDNN, and driver versions used for final experiments.
 
@@ -25,6 +26,8 @@ data/20_full_trained_models.csv
 ```
 
 Other small CSVs in `data/` are retained as reference metadata or analysis inputs.
+
+The serialized surrogate models were verified to load with the dependency versions pinned in `requirements.txt`. Pickle-based model artifacts can be version-sensitive, so dependency changes should be validated before reproducing experiments.
 
 ## Seeds
 

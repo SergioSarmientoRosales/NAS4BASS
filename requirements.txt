@@ -1,13 +1,13 @@
 # Python 3.12.2 was detected in the local development environment.
-# The pinned versions below come from the previous repository environment
-# when available. Keep them aligned with the serialized surrogate models.
-tensorflow==2.20.0
-keras
-numpy
+# Keep these versions aligned with the serialized surrogate models in models/.
+# TensorFlow 2.16.x is not compatible with NumPy 2.x binary wheels.
+tensorflow==2.16.1
+keras==3.3.3
+numpy>=1.26,<2.0
 pandas
 scipy
 scikit-learn==1.7.2
-xgboost==3.2.0
+xgboost==2.0.3
 joblib==1.5.3
 matplotlib==3.10.8
 tqdm

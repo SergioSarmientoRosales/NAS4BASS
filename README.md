@@ -120,7 +120,7 @@ python main.py --eval model_based --search nsga3 --seed 1 --pop-size 100 --n-gen
 data/20_full_trained_models.csv
 ```
 
-Run:
+Run the full benchmark:
 
 ```bash
 python Benchmark.py
@@ -139,6 +139,8 @@ python Plots.py
 ```
 
 to generate summary tables and the main benchmark figure from those outputs.
+
+`Benchmark.py` is not a lightweight smoke test: by default it evaluates all configured zero-cost predictors over the reference architectures and 30 seeds. Start with the quick-start `main.py` commands before running the full benchmark.
 
 ## Input Data Requirements
 

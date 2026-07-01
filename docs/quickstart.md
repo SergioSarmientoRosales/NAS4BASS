@@ -49,6 +49,8 @@ python main.py --eval model_based --search nsga3 --seed 1 --pop-size 100 --n-gen
 
 ## 4. Benchmark Zero-Cost Predictors
 
+This is the full benchmark path, not a smoke test. It can take substantially longer than the small `main.py` commands above.
+
 ```bash
 python Benchmark.py
 python Plots.py

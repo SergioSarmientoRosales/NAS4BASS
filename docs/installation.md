@@ -6,6 +6,8 @@ This project is a Python research-code repository. It uses TensorFlow/Keras for 
 
 The local source folder was inspected with Python 3.12.2 available on the machine. Use Python 3.12 when possible unless your TensorFlow installation requires a different compatible version.
 
+The project pins `numpy>=1.26,<2.0` because the TensorFlow 2.16.x wheels used by this repository are not compatible with NumPy 2.x binary packages.
+
 ## Windows PowerShell
 
 ```powershell
@@ -48,3 +50,5 @@ python main.py --help
 ```
 
 If `python main.py --help` fails while importing TensorFlow, check the TensorFlow installation first.
+
+If the error mentions `numpy.core.umath` or modules compiled against NumPy 1.x, recreate the environment and reinstall from `requirements.txt`; this usually means NumPy 2.x was installed.

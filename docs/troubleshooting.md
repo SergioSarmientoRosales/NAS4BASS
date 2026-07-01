@@ -30,6 +30,13 @@ python -c "import tensorflow as tf; print(tf.__version__); print(tf.config.list_
 
 If this fails, reinstall TensorFlow in a clean virtual environment. GPU support depends on your OS, driver, CUDA, cuDNN, and TensorFlow version.
 
+If the traceback mentions `numpy.core.umath`, `numpy.core._multiarray_umath`, or a module compiled with NumPy 1.x, NumPy 2.x is probably installed. Recreate the environment and reinstall the pinned dependencies:
+
+```powershell
+python -m pip install --upgrade pip
+pip install --force-reinstall -r requirements.txt
+```
+
 ## Windows Opens The Microsoft Store Instead Of Python
 
 On some Windows systems, `python` points to a Microsoft Store alias instead of the real Python installation.
