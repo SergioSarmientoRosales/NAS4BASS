@@ -1,0 +1,4 @@
+# Reference only. The repository root requirements.txt is the source of truth.
+tensorflow==2.16.1
+keras==3.3.3
+numpy>=1.26,<2.0

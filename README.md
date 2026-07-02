@@ -153,6 +153,17 @@ to generate summary tables and the main benchmark figure from those outputs.
 
 For the TensorFlow/Keras adaptation rationale, BASS traversal assumptions, score direction, and known limitations of the NASLib-inspired measures, see [docs/zero_cost_measures.md](docs/zero_cost_measures.md).
 
+## SRIR CNN Training
+
+The standalone `srir_training/` package provides a reusable TensorFlow/Keras
+training pipeline for SRIR CNNs. It supports x2, x3, and x4 paired LR/HR
+training, DIV2K-style filenames, PSNR/SSIM evaluation, checkpointing, resume,
+fine-tuning from folders of `best.keras` models, CPU fallback, and optional GPU
+mixed precision.
+
+See [srir_training/README.md](srir_training/README.md) and
+[docs/srir_training.md](docs/srir_training.md).
+
 ## Input Data Requirements
 
 The repository includes small CSV reference files under `data/`. Large datasets are not included.

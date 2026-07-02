@@ -60,5 +60,11 @@ jobs:
       - name: Run tests
         run: python -m unittest discover -s tests -v
 
+      - name: Check SRIR fine-tuning CLI
+        run: python -m srir_training.fine_tune --help
+
+      - name: Run SRIR training smoke test
+        run: python -m srir_training.smoke_test --cpu
+
       - name: Validate data and surrogate models
         run: python tools/validate_artifacts.py

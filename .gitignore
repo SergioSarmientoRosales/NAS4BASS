@@ -29,6 +29,8 @@ Thumbs.db
 
 # Experiment outputs and generated results
 outputs/
+srir_outputs/
+srir_finetune_outputs/
 results/
 runs/
 logs/

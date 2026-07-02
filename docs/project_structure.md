@@ -9,6 +9,7 @@ NAS4BASS/
   core/
   search/
   search_space/
+  srir_training/
   evaluators/
   predictors/
   models/
@@ -39,6 +40,11 @@ NAS4BASS/
 - `search_space/encoding.py`: converts between binary and readable encodings.
 - `search_space/search_space.py`: decodes architecture candidates.
 - `search_space/model_builder.py`: builds Keras models from decoded candidates.
+
+## SRIR Training
+
+- `srir_training/`: standalone TensorFlow/Keras training and fine-tuning pipeline for x2, x3, and x4 SRIR CNNs.
+- `docs/srir_training.md`: short integration note for the training package.
 
 ## Evaluators
 
