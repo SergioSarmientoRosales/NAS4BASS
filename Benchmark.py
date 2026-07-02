@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import ast
-import copy
-import json
 import math
 import random
 import time
 import warnings
-from collections import namedtuple
 from pathlib import Path
 from typing import Callable, Dict, List, Tuple
 
@@ -15,16 +12,15 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
+from search_space.model_builder import get_model as build_model_from_genotype
+from search_space.search_space import decode as decode_gene_to_genotype
+
 try:
     from scipy.stats import kendalltau, spearmanr
 except ImportError as e:
     raise ImportError(
         "This script requires scipy. Install it with: pip install scipy"
     ) from e
-
-keras = tf.keras
-layers = tf.keras.layers
-
 
 # ============================================================
 # 0) Runtime / reproducibility
@@ -54,23 +50,8 @@ def set_seed(seed: int) -> None:
 
 
 # ============================================================
-# 1) Keras-serializable layers / utilities
+# 1) Keras-serializable utilities
 # ============================================================
-@tf.keras.utils.register_keras_serializable(package="sr")
-class PixelShuffle(tf.keras.layers.Layer):
-    def __init__(self, upscale_factor: int, **kwargs):
-        super().__init__(**kwargs)
-        self.upscale_factor = int(upscale_factor)
-
-    def call(self, x):
-        return tf.nn.depth_to_space(x, self.upscale_factor)
-
-    def get_config(self):
-        cfg = super().get_config()
-        cfg.update({"upscale_factor": self.upscale_factor})
-        return cfg
-
-
 @tf.keras.utils.register_keras_serializable(package="sr")
 def psnr(y_true, y_pred):
     y_true = tf.cast(tf.clip_by_value(y_true, 0.0, 1.0), tf.float32)
@@ -79,151 +60,7 @@ def psnr(y_true, y_pred):
 
 
 # ============================================================
-# 2) Gene -> Model
-# ============================================================
-Genotype = namedtuple("Genotype", ["Branch1", "Branch2", "Branch3"])
-
-PRIMITIVES = [
-    "conv",
-    "dil_conv_d2",
-    "dil_conv_d3",
-    "dil_conv_d4",
-    "Dsep_conv",
-    "invert_Bot_Conv_E2",
-    "conv_transpose",
-    "identity",
-]
-CHANNELS = [16, 32, 48, 64, 16, 32, 48, 64]
-REPEAT = [1, 2, 3, 4, 1, 2, 3, 4]
-K = [1, 3, 5, 7, 1, 3, 5, 7]
-
-
-def convert_cell(cell_bit_string: List[int]) -> List[List[int]]:
-    tmp = [cell_bit_string[i:i + 3] for i in range(0, len(cell_bit_string), 3)]
-    return [tmp[i:i + 3] for i in range(0, len(tmp), 3)]
-
-
-def convert(bit_string: List[int]) -> List[List[List[int]]]:
-    third = len(bit_string) // 3
-    b1 = convert_cell(bit_string[:third])
-    b2 = convert_cell(bit_string[third:third * 2])
-    b3 = convert_cell(bit_string[third * 2:])
-    return [b1, b2, b3]
-
-
-def decode_gene_to_genotype(gene: List[int]) -> Genotype:
-    g = copy.deepcopy(gene)
-    ch_idx = g.pop(0)
-    b1, b2, b3 = convert(g)
-
-    branch1 = [("channels", CHANNELS[ch_idx])]
-    branch2 = [("channels", CHANNELS[ch_idx])]
-    branch3 = [("channels", CHANNELS[ch_idx])]
-
-    for block in b1:
-        for unit in block:
-            branch1.append((PRIMITIVES[unit[0]], [K[unit[1]], K[unit[1]]], REPEAT[unit[2]]))
-    for block in b2:
-        for unit in block:
-            branch2.append((PRIMITIVES[unit[0]], [K[unit[1]], K[unit[1]]], REPEAT[unit[2]]))
-    for block in b3:
-        for unit in block:
-            branch3.append((PRIMITIVES[unit[0]], [K[unit[1]], K[unit[1]]], REPEAT[unit[2]]))
-
-    return Genotype(Branch1=branch1, Branch2=branch2, Branch3=branch3)
-
-
-def get_branches(genotype: Genotype):
-    gens = copy.deepcopy(genotype)
-    conv_args = {"activation": "relu", "padding": "same"}
-
-    channels = []
-    for element in gens:
-        channels.append(element.pop(0))
-
-    branches = [[], [], []]
-    for i in range(len(gens)):
-        for (op, kernel, rep) in gens[i]:
-            if op == "conv":
-                for _ in range(rep):
-                    branches[i].append(layers.Conv2D(channels[i][1], kernel, **conv_args))
-            elif op == "dil_conv_d2":
-                for _ in range(rep):
-                    branches[i].append(
-                        layers.Conv2D(channels[i][1], kernel, dilation_rate=2, **conv_args)
-                    )
-            elif op == "dil_conv_d3":
-                for _ in range(rep):
-                    branches[i].append(
-                        layers.Conv2D(channels[i][1], kernel, dilation_rate=3, **conv_args)
-                    )
-            elif op == "dil_conv_d4":
-                for _ in range(rep):
-                    branches[i].append(
-                        layers.Conv2D(channels[i][1], kernel, dilation_rate=4, **conv_args)
-                    )
-            elif op == "Dsep_conv":
-                for _ in range(rep):
-                    branches[i].extend([
-                        layers.DepthwiseConv2D(kernel, **conv_args),
-                        layers.Conv2D(channels[i][1], 1, **conv_args),
-                    ])
-            elif op == "invert_Bot_Conv_E2":
-                expand = int(channels[i][1]) * 2
-                for _ in range(rep):
-                    branches[i].extend([
-                        layers.Conv2D(expand, 1, **conv_args),
-                        layers.DepthwiseConv2D(kernel, **conv_args),
-                        layers.Conv2D(channels[i][1], kernel, **conv_args),
-                    ])
-            elif op == "conv_transpose":
-                for _ in range(rep):
-                    branches[i].append(layers.Conv2DTranspose(channels[i][1], kernel, **conv_args))
-            elif op == "identity":
-                branches[i].append(layers.Identity())
-            else:
-                raise ValueError(f"Unknown op: {op}")
-
-    channels_mod = channels[0][1]
-    return branches[0], branches[1], branches[2], channels_mod
-
-
-def build_model_from_genotype(genotype: Genotype, upscale_factor: int = 2) -> tf.keras.Model:
-    branch1, branch2, branch3, channels_mod = get_branches(genotype)
-    conv_args = {"activation": "relu", "padding": "same"}
-
-    inputs = layers.Input(shape=(None, None, 3), name="lr")
-    stem = layers.Conv2D(channels_mod, 3, **conv_args, name="stem")(inputs)
-
-    b1 = stem
-    for l in branch1:
-        b1 = l(b1)
-
-    b2 = stem
-    for l in branch2:
-        b2 = l(b2)
-
-    b3 = stem
-    for l in branch3:
-        b3 = l(b3)
-
-    x = layers.Add(name="merge")([b1, b2, b3])
-    x = layers.Conv2D(3 * (upscale_factor ** 2), 3, **conv_args, name="pre_shuffle")(x)
-    x = PixelShuffle(upscale_factor, name="pixel_shuffle")(x)
-    out = layers.Conv2D(
-        3,
-        3,
-        padding="same",
-        activation="sigmoid",
-        dtype="float32",
-        name="sr",
-    )(x)
-
-    return keras.Model(inputs, out, name="SR_gene")
-
-
-# ============================================================
-# 3) CSV loader
+# 2) CSV loader
 # ============================================================
 def _parse_gene_field(value, expected_len: int = 28) -> List[int]:
     if isinstance(value, list):
@@ -245,7 +82,7 @@ def _parse_gene_field(value, expected_len: int = 28) -> List[int]:
 
 
 def load_benchmark_models_csv(path: str, expected_len: int = 28) -> pd.DataFrame:
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, encoding="utf-8-sig")
 
     gene_candidates = ["Net", "gene", "Gene", "genotype", "architecture", "arch"]
     psnr_candidates = ["valid_psnr", "psnr", "PSNR", "Valid_PSNR"]

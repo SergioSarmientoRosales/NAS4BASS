@@ -67,13 +67,26 @@ Both locations are ignored by Git so that generated results do not pollute versi
 
 ## Lightweight Validation Checks
 
-After installing the TensorFlow/Keras stack, run:
+Run the lightweight test suite:
 
 ```bash
 python -m unittest discover -s tests
 ```
 
 The zero-cost smoke tests instantiate representative BASS architectures, verify that searchable convolutional operations appear in the Keras graph, check that trainable convolutional parameters are visible to the metric collectors, and confirm that selected inexpensive zero-cost scores return scalar finite values.
+
+Validate curated data and surrogate model artifacts:
+
+```bash
+python tools/validate_artifacts.py
+```
+
+The validator checks architecture length and value ranges, numeric fields, duplicate architecture rows, and whether each serialized surrogate model can predict from a 28-gene input. Duplicate architecture rows and historical non-finite `train_psnr` entries are reported as warnings by default.
+
+The GitHub Actions workflow mirrors this in two stages:
+
+- A lightweight job checks imports, `main.py --help`, compilation, lightweight tests, and CSV validation without TensorFlow.
+- A full job installs `requirements.txt`, runs all tests, and validates both data and surrogate models.
 
 ## What Is Not Included
 

@@ -55,7 +55,27 @@ Use `--outdir` if you want outputs somewhere else:
 python main.py --eval model_based --search nsga3 --seed 1 --pop-size 100 --n-gen 500 --outdir outputs
 ```
 
-## 4. Benchmark Zero-Cost Predictors
+Named weights are safer than positional weights for weighted ensembles:
+
+```bash
+python main.py --eval model_based --ensemble-method weighted_mean --selected-models xgb,rf --ensemble-weights xgb=0.7,rf=0.3 --search nsga3 --seed 1 --pop-size 100 --n-gen 500
+```
+
+## 4. Validate Curated Artifacts
+
+Check the included CSV files and surrogate `.pkl` models:
+
+```bash
+python tools/validate_artifacts.py
+```
+
+To validate only CSV files:
+
+```bash
+python tools/validate_artifacts.py --skip-models
+```
+
+## 5. Benchmark Zero-Cost Predictors
 
 This is the full benchmark path, not a smoke test. It can take substantially longer than the small `main.py` commands above.
 

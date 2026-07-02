@@ -4,11 +4,23 @@ import random
 from typing import Any
 
 import numpy as np
-import tensorflow as tf
 
 from search_space.encoding import bstr_to_rstr
 from search_space.search_space import decode
-from search_space.model_builder import get_model
+
+
+def _load_tensorflow_model_builder():
+    try:
+        import tensorflow as tf
+        from search_space.model_builder import get_model
+    except Exception as exc:
+        raise RuntimeError(
+            "TensorFlow/Keras is required to compute the parameter-count objective. "
+            "Install the pinned requirements from requirements.txt, including numpy<2 "
+            "for TensorFlow 2.16.x."
+        ) from exc
+
+    return tf, get_model
 
 
 class NASProblem:
@@ -149,6 +161,7 @@ class NASProblem:
 
         random.seed(random_seed)
         genotype = decode(decoded_ind)
+        tf, get_model = _load_tensorflow_model_builder()
 
         model = None
         try:

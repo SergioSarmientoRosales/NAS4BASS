@@ -1,21 +1,8 @@
 from __future__ import annotations
 
-from search.nsga3 import NSGA3
-from search.random_search import RandomSearch
+SEARCH_REGISTRY = {"nsga3", "random"}
 
-from evaluators.model_based import ModelBasedEvaluator
-from evaluators.zero_cost import ZeroCostEvaluator
-
-
-SEARCH_REGISTRY = {
-    "nsga3": NSGA3,
-    "random": RandomSearch,
-}
-
-EVALUATOR_REGISTRY = {
-    "model_based": ModelBasedEvaluator,
-    "zero_cost": ZeroCostEvaluator,
-}
+EVALUATOR_REGISTRY = {"model_based", "zero_cost"}
 
 
 def build_search_method(
@@ -35,10 +22,19 @@ def build_search_method(
     if name not in SEARCH_REGISTRY:
         raise ValueError(
             f"Unknown search method '{name}'. "
-            f"Available options: {sorted(SEARCH_REGISTRY.keys())}"
+            f"Available options: {sorted(SEARCH_REGISTRY)}"
         )
 
-    search_cls = SEARCH_REGISTRY[name]
+    if name == "nsga3":
+        from search.nsga3 import NSGA3
+
+        search_cls = NSGA3
+    elif name == "random":
+        from search.random_search import RandomSearch
+
+        search_cls = RandomSearch
+    else:
+        raise RuntimeError(f"Unhandled search method '{name}'")
 
     return search_cls(
         problem=problem,
@@ -70,12 +66,14 @@ def build_evaluator(
     if eval_name not in EVALUATOR_REGISTRY:
         raise ValueError(
             f"Unknown evaluator '{eval_name}'. "
-            f"Available options: {sorted(EVALUATOR_REGISTRY.keys())}"
+            f"Available options: {sorted(EVALUATOR_REGISTRY)}"
         )
 
     if eval_name == "model_based":
         if model_paths is None or len(model_paths) == 0:
             raise ValueError("model_based evaluator requires model_paths")
+
+        from evaluators.model_based import ModelBasedEvaluator
 
         return ModelBasedEvaluator(
             model_paths=model_paths,
@@ -86,6 +84,8 @@ def build_evaluator(
         )
 
     if eval_name == "zero_cost":
+        from evaluators.zero_cost import ZeroCostEvaluator
+
         return ZeroCostEvaluator(
             metric_name=zc_metric,
             score_transform=zc_score_transform,

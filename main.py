@@ -13,7 +13,7 @@ from core.problem import NASProblem
 from core.registry import build_search_method, build_evaluator
 
 
-def parse_float_list(text: str | None) -> list[float] | None:
+def parse_ensemble_weights(text: str | None) -> list[float] | dict[str, float] | None:
     if text is None:
         return None
 
@@ -21,7 +21,31 @@ def parse_float_list(text: str | None) -> list[float] | None:
     if text == "":
         return None
 
-    return [float(x.strip()) for x in text.split(",") if x.strip()]
+    parts = [x.strip() for x in text.split(",") if x.strip()]
+    if not parts:
+        return None
+
+    has_named_parts = ["=" in part for part in parts]
+
+    if any(has_named_parts) and not all(has_named_parts):
+        raise ValueError(
+            "Use either positional ensemble weights such as '0.5,0.5' "
+            "or named weights such as 'xgb=0.5,rf=0.5', not a mixture."
+        )
+
+    if all(has_named_parts):
+        weights: dict[str, float] = {}
+        for part in parts:
+            name, value = part.split("=", 1)
+            name = name.strip()
+            if not name:
+                raise ValueError(f"Empty model name in ensemble weight '{part}'")
+            if name in weights:
+                raise ValueError(f"Duplicate ensemble weight for model '{name}'")
+            weights[name] = float(value.strip())
+        return weights
+
+    return [float(x) for x in parts]
 
 
 def parse_str_list(text: str | None) -> list[str] | None:
@@ -78,7 +102,10 @@ def parse_args():
         "--ensemble-weights",
         type=str,
         default=None,
-        help="Comma-separated weights for weighted_mean",
+        help=(
+            "Comma-separated weights for weighted_mean. Use positional weights "
+            "like '0.5,0.5' or named weights like 'xgb=0.5,rf=0.5'."
+        ),
     )
 
     parser.add_argument(
@@ -272,7 +299,7 @@ def main():
             "You must provide --n-gen when --early-stop is disabled."
         )
 
-    set_global_seed(args.seed)
+    set_global_seed(args.seed, seed_tensorflow=False)
 
     if args.eval == "model_based":
         model_paths = resolve_model_paths(args)
@@ -280,7 +307,7 @@ def main():
         model_paths = []
 
     selected_models = parse_str_list(args.selected_models)
-    ensemble_weights = parse_float_list(args.ensemble_weights)
+    ensemble_weights = parse_ensemble_weights(args.ensemble_weights)
 
     if args.ensemble_method == "weighted_mean" and ensemble_weights is None:
         raise ValueError(

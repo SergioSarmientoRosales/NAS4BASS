@@ -100,6 +100,8 @@ Important arguments:
 
 - `--eval model_based` uses surrogate predictors from `models/*.pkl`.
 - `--eval zero_cost` evaluates architectures with a zero-cost metric.
+- `--selected-models` selects surrogate models by name and preserves the requested order.
+- `--ensemble-weights` supports positional weights such as `0.5,0.5` and named weights such as `xgb=0.5,rf=0.5`.
 - `--zc-metric` selects a zero-cost metric, for example `synflow`, `fisher`, `snip`, or `param_score`.
 - `--zc-score-transform` selects the raw or normalized score direction used by zero-cost NAS.
 - `--search nsga3` runs NSGA-III.
@@ -111,6 +113,12 @@ Example:
 
 ```bash
 python main.py --eval model_based --search nsga3 --seed 1 --pop-size 100 --n-gen 500
+```
+
+Named weights are recommended when using a weighted surrogate ensemble:
+
+```bash
+python main.py --eval model_based --ensemble-method weighted_mean --selected-models xgb,rf --ensemble-weights xgb=0.7,rf=0.3 --search nsga3 --seed 1 --pop-size 100 --n-gen 500
 ```
 
 ## Zero-Cost Predictor Benchmark
@@ -148,6 +156,14 @@ For the TensorFlow/Keras adaptation rationale, BASS traversal assumptions, score
 ## Input Data Requirements
 
 The repository includes small CSV reference files under `data/`. Large datasets are not included.
+
+Validate curated CSV files and serialized surrogate models with:
+
+```bash
+python tools/validate_artifacts.py
+```
+
+Duplicate architecture rows and historical non-finite `train_psnr` entries are reported as warnings by default. Use `--fail-on-duplicates` when you want duplicate architecture rows to fail validation.
 
 TODO: document the original training dataset locations and download/preprocessing steps when they are finalized for public release.
 
