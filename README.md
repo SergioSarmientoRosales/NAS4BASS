@@ -30,7 +30,7 @@ Why this matters: training every candidate architecture is expensive; therefore,
 - Modular BASS-style architecture encoding and decoding.
 - NSGA-III and random-search backends.
 - Model-based evaluation with serialized surrogate predictors in `models/`.
-- Zero-cost predictor evaluation, including SynFlow, Fisher, SNIP, GraSP, GradNorm, NWOT, Zen, ZiCo, Jacobian covariance, L2 norm, plain score, and parameter score variants.
+- Zero-cost predictor evaluation, including SynFlow, Fisher, SNIP, GraSP, GradNorm, NWOT, Zen, ZiCo, Jacobian covariance, L2 norm, plain score, and parameter-count baselines.
 - CSV outputs for population histories, non-dominated solutions, and cache summaries.
 - Benchmark scripts for comparing zero-cost predictor behavior against trained-model reference data.
 
@@ -101,6 +101,7 @@ Important arguments:
 - `--eval model_based` uses surrogate predictors from `models/*.pkl`.
 - `--eval zero_cost` evaluates architectures with a zero-cost metric.
 - `--zc-metric` selects a zero-cost metric, for example `synflow`, `fisher`, `snip`, or `param_score`.
+- `--zc-score-transform` selects the raw or normalized score direction used by zero-cost NAS.
 - `--search nsga3` runs NSGA-III.
 - `--search random` runs random search.
 - `--n-gen` is required unless `--early-stop` is enabled.
@@ -141,6 +142,8 @@ python Plots.py
 to generate summary tables and the main benchmark figure from those outputs.
 
 `Benchmark.py` is not a lightweight smoke test: by default it evaluates all configured zero-cost predictors over the reference architectures and 30 seeds. Start with the quick-start `main.py` commands before running the full benchmark.
+
+For the TensorFlow/Keras adaptation rationale, BASS traversal assumptions, score direction, and known limitations of the NASLib-inspired measures, see [docs/zero_cost_measures.md](docs/zero_cost_measures.md).
 
 ## Input Data Requirements
 

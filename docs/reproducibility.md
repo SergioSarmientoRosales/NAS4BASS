@@ -39,6 +39,8 @@ python main.py --eval model_based --search nsga3 --seed 1 --pop-size 100 --n-gen
 
 `Benchmark.py` defines its own internal seed settings for repeated zero-cost predictor analysis.
 
+For zero-cost NAS, `evaluators/zero_cost.py` also derives a stable TensorFlow seed from the run seed and decoded architecture. This reduces score changes caused only by candidate evaluation order. Use `--disable-deterministic-arch-seed` only when reproducing older behavior.
+
 ## Generated Outputs
 
 Search runs create CSV files under:
@@ -62,6 +64,16 @@ Both locations are ignored by Git so that generated results do not pollute versi
 3. Run a small smoke test from `docs/quickstart.md`.
 4. Run the desired full search or benchmark.
 5. Archive important outputs separately, for example in a release artifact or experiment storage.
+
+## Lightweight Validation Checks
+
+After installing the TensorFlow/Keras stack, run:
+
+```bash
+python -m unittest discover -s tests
+```
+
+The zero-cost smoke tests instantiate representative BASS architectures, verify that searchable convolutional operations appear in the Keras graph, check that trainable convolutional parameters are visible to the metric collectors, and confirm that selected inexpensive zero-cost scores return scalar finite values.
 
 ## What Is Not Included
 

@@ -59,7 +59,10 @@ def build_evaluator(
     ensemble_method: str = "mean",
     ensemble_weights: list[float] | None = None,
     selected_model_names: list[str] | None = None,
-    zc_metric: str = "param_score",
+    zc_metric: str = "synflow",
+    zc_score_transform: str = "raw",
+    seed: int = 1,
+    deterministic_arch_seed: bool = True,
     verbose: bool = True,
 ):
     eval_name = eval_name.lower()
@@ -85,6 +88,9 @@ def build_evaluator(
     if eval_name == "zero_cost":
         return ZeroCostEvaluator(
             metric_name=zc_metric,
+            score_transform=zc_score_transform,
+            seed=seed,
+            deterministic_arch_seed=deterministic_arch_seed,
             verbose=verbose,
         )
 

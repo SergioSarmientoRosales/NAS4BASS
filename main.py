@@ -100,8 +100,26 @@ def parse_args():
     parser.add_argument(
         "--zc-metric",
         type=str,
-        default="param_score",
+        default="synflow",
         help="Zero-cost metric name",
+    )
+    parser.add_argument(
+        "--zc-score-transform",
+        type=str,
+        default="raw",
+        choices=["raw", "div_params", "neg_raw", "neg_div_params"],
+        help=(
+            "Transform applied to the raw zero-cost score before optimization. "
+            "The NAS objective minimizes -transformed_score."
+        ),
+    )
+    parser.add_argument(
+        "--disable-deterministic-arch-seed",
+        action="store_true",
+        help=(
+            "Disable per-architecture TensorFlow seeding for zero-cost metrics. "
+            "By default, each decoded architecture receives a stable TF seed."
+        ),
     )
 
     parser.add_argument(
@@ -217,6 +235,11 @@ def print_run_configuration(
     print(f"[INFO] Evaluation method: {args.eval}")
     if args.eval == "zero_cost":
         print(f"[INFO] Zero-cost metric: {args.zc_metric}")
+        print(f"[INFO] Zero-cost score transform: {args.zc_score_transform}")
+        print(
+            f"[INFO] Deterministic architecture seed: "
+            f"{not args.disable_deterministic_arch_seed}"
+        )
     print(f"[INFO] Search method: {args.search}")
     print("[INFO] Model paths:")
     for p in model_paths:
@@ -295,6 +318,9 @@ def main():
         ensemble_weights=ensemble_weights,
         selected_model_names=selected_models,
         zc_metric=args.zc_metric,
+        zc_score_transform=args.zc_score_transform,
+        seed=args.seed,
+        deterministic_arch_seed=not args.disable_deterministic_arch_seed,
         verbose=True,
     )
 
@@ -343,6 +369,10 @@ def main():
         "search_method": args.search,
         "evaluation_method": args.eval,
         "zc_metric": args.zc_metric if args.eval == "zero_cost" else "",
+        "zc_score_transform": args.zc_score_transform if args.eval == "zero_cost" else "",
+        "deterministic_arch_seed": (
+            not args.disable_deterministic_arch_seed if args.eval == "zero_cost" else ""
+        ),
         "ensemble_method": args.ensemble_method if args.eval == "model_based" else "",
         "selected_models": ",".join(selected_models) if selected_models is not None else "ALL",
         "pop_size": args.pop_size,

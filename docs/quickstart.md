@@ -19,7 +19,8 @@ Expected result:
 
 ## 2. Zero-Cost Search
 
-This mode does not need the surrogate `.pkl` files.
+This mode does not need the surrogate `.pkl` files. The fastest smoke test uses
+`param_score`, which is a size-only baseline.
 
 ```bash
 python main.py --eval zero_cost --zc-metric param_score --search random --seed 1 --pop-size 10 --n-gen 2
@@ -29,6 +30,13 @@ Try a heavier zero-cost metric:
 
 ```bash
 python main.py --eval zero_cost --zc-metric synflow --search random --seed 1 --pop-size 10 --n-gen 2
+```
+
+To make score direction or parameter normalization explicit, use
+`--zc-score-transform`, for example:
+
+```bash
+python main.py --eval zero_cost --zc-metric synflow --zc-score-transform div_params --search random --seed 1 --pop-size 10 --n-gen 2
 ```
 
 ## 3. Full-Scale Search

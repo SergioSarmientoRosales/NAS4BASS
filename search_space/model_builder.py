@@ -109,8 +109,14 @@ def get_model(genotype, upscale_factor=DEFAULT_UPSCALE, channels=DEFAULT_INPUT_C
         b3 = layer(b3)
 
     x = layers.Add()([b1, b2, b3])
-    x = layers.Conv2D(12, 3, **conv_args)(x)
+    x = layers.Conv2D(3 * (upscale_factor ** 2), 3, **conv_args)(x)
     x = PixelShuffle(upscale_factor=upscale_factor)(x)
-    outputs = layers.Conv2D(3, 3, **conv_args, dtype="float32")(x)
+    outputs = layers.Conv2D(
+        3,
+        3,
+        padding="same",
+        activation="sigmoid",
+        dtype="float32",
+    )(x)
 
     return keras.Model(inputs, outputs, name="sr_surrogate_arch")

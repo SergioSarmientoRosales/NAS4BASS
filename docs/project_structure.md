@@ -42,6 +42,7 @@ NAS4BASS/
 - `evaluators/model_based.py`: uses surrogate predictors from `models/*.pkl`.
 - `evaluators/zero_cost.py`: computes zero-cost predictor scores.
 - `evaluators/metrics/`: individual zero-cost metrics.
+- `docs/zero_cost_measures.md`: explains the NASLib-inspired TensorFlow/Keras zero-cost adaptations for BASS SRIR models.
 
 ## Data And Artifacts
 

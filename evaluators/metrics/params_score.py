@@ -55,4 +55,4 @@ def compute_param_score(
         input_shape=input_shape,
     )
 
-    return float(model.count_params())
+    return -float(model.count_params())
