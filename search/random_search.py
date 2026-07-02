@@ -8,6 +8,11 @@ from tqdm import tqdm
 from search.base import BaseSearch
 
 
+def _primary_score_from_objective(obj):
+    primary_obj = float(obj[0])
+    return -primary_obj if np.isfinite(primary_obj) else np.nan
+
+
 class RandomSearch(BaseSearch):
     def _save_population(self, pop, generation: int):
         if not self.output_file:
@@ -23,7 +28,7 @@ class RandomSearch(BaseSearch):
                     "generation",
                     "individual_id",
                     "decoded_architecture",
-                    "predicted_psnr",
+                    "primary_score",
                     "params",
                 ])
 
@@ -34,7 +39,7 @@ class RandomSearch(BaseSearch):
                     generation,
                     idx,
                     " ".join(map(str, decoded_arch)),
-                    float(obj[0]),
+                    _primary_score_from_objective(obj),
                     int(obj[1]),
                 ])
 

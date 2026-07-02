@@ -2,22 +2,36 @@ import math
 import numpy as np
 
 
+def _finite_objectives(values):
+    sanitized = []
+    has_invalid = False
+
+    for value in values:
+        if np.isfinite(value):
+            sanitized.append(float(value))
+        else:
+            sanitized.append(np.inf)
+            has_invalid = True
+
+    return [np.inf] * len(sanitized) if has_invalid else sanitized
+
+
 def dominance(a_f, b_f):
-    a_dominates = False
-    b_dominates = False
+    a_better = False
+    b_better = False
 
-    for a, b in zip(a_f, b_f):
-        if a > b:
-            a_dominates = True
-        elif b > a:
-            b_dominates = True
+    for a, b in zip(_finite_objectives(a_f), _finite_objectives(b_f)):
+        if a < b:
+            a_better = True
+        elif b < a:
+            b_better = True
 
-        if a_dominates and b_dominates:
+        if a_better and b_better:
             return 0
 
-    if a_dominates:
+    if a_better:
         return 1
-    elif b_dominates:
+    elif b_better:
         return -1
     else:
         return 0

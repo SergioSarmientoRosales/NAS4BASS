@@ -166,6 +166,19 @@ class NASProblem:
 
         return params
 
+    @staticmethod
+    def _make_objectives(score: float, params: float | int) -> list[float]:
+        score = float(score)
+        params = float(params)
+
+        if not np.isfinite(score):
+            return [float("inf"), int(1e18)]
+
+        primary_objective = -score
+        params_objective = int(params) if np.isfinite(params) and params >= 0 else int(1e18)
+
+        return [float(primary_objective), params_objective]
+
     # public version: accepts RAW individual
     def func_eval_params(self, ind, random_seed: int = 1) -> int:
         decoded_ind = self.get_decoded_ind(ind)
@@ -206,7 +219,7 @@ class NASProblem:
             score = self._evaluate_primary_score_from_decoded(decoded_ind, n_eval)
             params = self._func_eval_params_from_decoded(decoded_ind)
 
-        objectives = [-float(score), int(params)]
+        objectives = self._make_objectives(score=score, params=params)
 
         if self.use_obj_cache:
             self.obj_cache[arch_key] = objectives

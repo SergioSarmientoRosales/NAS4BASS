@@ -4,8 +4,18 @@ import csv
 import numpy as np
 from tqdm import tqdm
 
-from search.operators import TournamentSelection, KPointBinaryCrossover, BitFlipMutation
+from search.operators import (
+    TournamentSelection,
+    KPointBinaryCrossover,
+    BitFlipMutation,
+    _finite_objectives,
+)
 from search.base import BaseSearch
+
+
+def _primary_score_from_objective(obj):
+    primary_obj = float(obj[0])
+    return -primary_obj if np.isfinite(primary_obj) else np.nan
 
 
 class ReferencePoint:
@@ -46,7 +56,12 @@ class NSGA3(BaseSearch):
 
     @staticmethod
     def _dominate(p, q):
-        return all(p_i < q_i for p_i, q_i in zip(p, q))
+        p_vals = _finite_objectives(p)
+        q_vals = _finite_objectives(q)
+
+        return all(p_i <= q_i for p_i, q_i in zip(p_vals, q_vals)) and any(
+            p_i < q_i for p_i, q_i in zip(p_vals, q_vals)
+        )
 
     def _fast_non_dominated_sorting(self, pop):
         f1 = []
@@ -270,7 +285,7 @@ class NSGA3(BaseSearch):
                 generation,
                 idx,
                 " ".join(map(str, decoded_arch)),
-                float(obj[0]),
+                _primary_score_from_objective(obj),
                 int(obj[1]),
             ])
 
@@ -288,7 +303,7 @@ class NSGA3(BaseSearch):
                     "generation",
                     "individual_id",
                     "decoded_architecture",
-                    "predicted_psnr",
+                    "primary_score",
                     "params",
                 ])
                 self._header_written = True
