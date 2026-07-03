@@ -60,6 +60,8 @@ NAS4BASS/
 
 - `models/`: serialized surrogate predictors used by model-based search.
 - `data/*.csv`: small reference files for benchmark and analysis scripts.
+- `data/architectures/`: reproducible sampled BASS architecture sets and trainer manifests.
+- `tools/sample_bass_architectures.py`: dynamic diversity-aware BASS sampler for full-training candidates.
 - `tools/validate_artifacts.py`: validates curated CSV data and serialized surrogate model compatibility.
 - `tests/`: lightweight import, ensemble, validation, and zero-cost smoke tests.
 - `.github/workflows/ci.yml`: CI workflow for lightweight checks and full dependency checks.

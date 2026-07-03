@@ -261,6 +261,17 @@ Then train it with:
 python -m srir_training.train --custom-model-path path/to/model.keras ...
 ```
 
+For BASS architectures sampled as decoded 28-gene JSON files, use:
+
+```bash
+python -m srir_training.train \
+  --bass-gene-file data/architectures/bass_50_sample/genes/bass_0001.json \
+  --directory-train /data/DIV2K_train_HR \
+  --directory-val /data/DIV2K_valid_HR \
+  --scale 2 \
+  --run-name bass_0001
+```
+
 ## Future BASS/NAS Integration
 
 BASS/NAS models can be connected without changing this training package by

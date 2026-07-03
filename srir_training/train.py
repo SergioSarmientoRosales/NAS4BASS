@@ -11,7 +11,7 @@ from srir_training.config import config_from_args, save_config, validate_config
 from srir_training.data import build_train_val_datasets
 from srir_training.losses import get_loss
 from srir_training.metrics import default_metrics
-from srir_training.models import load_or_build_model
+from srir_training.models import load_custom_keras_model, load_or_build_model
 from srir_training.utils import (
     build_optimizer,
     configure_runtime,
@@ -97,7 +97,7 @@ def main(argv: list[str] | None = None) -> int:
     with strategy.scope():
         if cfg.training.resume_from:
             print(f"[MODEL] Resuming model from {cfg.training.resume_from}")
-            model = tf.keras.models.load_model(cfg.training.resume_from, compile=False)
+            model = load_custom_keras_model(cfg.training.resume_from)
         else:
             model = load_or_build_model(cfg.model, cfg.data)
         compile_model(model, cfg)
@@ -122,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
     best_model_path = run_dir / "checkpoints" / "best.keras"
     eval_model = model
     if best_model_path.exists():
-        eval_model = tf.keras.models.load_model(best_model_path, compile=False)
+        eval_model = load_custom_keras_model(best_model_path)
         compile_model(eval_model, cfg)
 
     final_metrics = eval_model.evaluate(

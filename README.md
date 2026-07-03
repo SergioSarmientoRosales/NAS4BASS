@@ -156,6 +156,9 @@ to generate summary tables and the main benchmark figure from those outputs.
 
 For the TensorFlow/Keras adaptation rationale, BASS traversal assumptions, score direction, and known limitations of the NASLib-inspired measures, see [docs/zero_cost_measures.md](docs/zero_cost_measures.md).
 
+For the complementary broader BASS-space sample used before full training, see
+[docs/bass_sampling.md](docs/bass_sampling.md).
+
 ## SRIR CNN Training
 
 The standalone `srir_training/` package provides a reusable TensorFlow/Keras
