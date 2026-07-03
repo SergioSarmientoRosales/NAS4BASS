@@ -1,0 +1,29 @@
+{
+  "created_at_utc": "2026-07-03T19:36:51.291232+00:00",
+  "description": "Large random valid BASS decoded-gene pool followed by greedy max-min coverage selection in normalized encoding/structural descriptor space. No PSNR or performance labels are used.",
+  "descriptor_notes": [
+    "Decoded 28-gene BASS encoding normalized by gene range.",
+    "Structural descriptors include channel, operation/kernel/repeat counts, identity count, and estimated complexity.",
+    "PCA is not used for selection and no performance label is used."
+  ],
+  "epochs": 100,
+  "exclude_reference": false,
+  "gene_json_dir": "data/architectures/bass_50_sample/genes",
+  "n_selected": 50,
+  "output_csv": "data/architectures/bass_50_sample_architectures.csv",
+  "overlap_reference_in_pool": 0,
+  "overlap_reference_selected": 0,
+  "pool_size_requested": 10000,
+  "pool_size_unique": 10000,
+  "reference_csv": [
+    "data/20_full_trained_models.csv"
+  ],
+  "reference_gene_count": 20,
+  "sampling_method": "hybrid_random_pool_greedy_max_min",
+  "scale": 2,
+  "seed": 20260703,
+  "train_dir": "/data/DIV2K_train_HR",
+  "trainer_manifest": "data/architectures/bass_50_sample_trainer_manifest.csv",
+  "trainer_output_dir": "srir_outputs/bass_50_sample",
+  "val_dir": "/data/DIV2K_valid_HR"
+}

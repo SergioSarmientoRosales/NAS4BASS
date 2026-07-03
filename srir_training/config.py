@@ -34,6 +34,8 @@ class DataConfig:
 class ModelConfig:
     model_type: str = "residual_sr"
     custom_model_path: str = ""
+    bass_gene: str = ""
+    bass_gene_file: str = ""
     num_filters: int = 64
     num_res_blocks: int = 8
     residual_scale: float = 0.1
@@ -154,6 +156,13 @@ def validate_config(cfg: TrainConfig) -> None:
         raise ValueError("downsample_method must be one of: area, bicubic, bilinear, lanczos3, lanczos5")
     if cfg.data.repeats_per_image <= 0:
         raise ValueError("repeats_per_image must be positive")
+    model_sources = [
+        bool(cfg.model.custom_model_path),
+        bool(cfg.model.bass_gene),
+        bool(cfg.model.bass_gene_file),
+    ]
+    if sum(model_sources) > 1:
+        raise ValueError("Use only one of custom_model_path, bass_gene, or bass_gene_file")
     if cfg.model.residual_scale <= 0:
         raise ValueError("residual_scale must be positive")
     if cfg.training.epochs <= 0:
@@ -238,6 +247,8 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--resume-from", default=None)
     parser.add_argument("--custom-model-path", default=None)
+    parser.add_argument("--bass-gene", default=None, help="Decoded 28-gene BASS architecture, e.g. '[0, 1, ...]'")
+    parser.add_argument("--bass-gene-file", default=None, help="JSON file containing a decoded BASS gene under key 'gene'")
     parser.add_argument("--mixed-precision", choices=["auto", "on", "off"], default=None)
     parser.add_argument("--cpu", action="store_true")
     parser.add_argument("--deterministic", action="store_true")
@@ -289,6 +300,8 @@ def config_from_args(argv: list[str] | None = None) -> TrainConfig:
         ("runtime", "seed"): args.seed,
         ("runtime", "mixed_precision"): args.mixed_precision,
         ("model", "custom_model_path"): args.custom_model_path,
+        ("model", "bass_gene"): args.bass_gene,
+        ("model", "bass_gene_file"): args.bass_gene_file,
     }
 
     for (section, key), value in overrides.items():

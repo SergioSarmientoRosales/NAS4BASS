@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import ast
+import json
+from pathlib import Path
+
 import tensorflow as tf
 
 keras = tf.keras
@@ -138,9 +142,78 @@ def build_residual_sr_model(
     return keras.Model(inputs, outputs, name=f"residual_srir_x{scale}")
 
 
+def parse_bass_gene(value: str | list[int] | tuple[int, ...]) -> list[int]:
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            raise ValueError("BASS gene string cannot be empty")
+        parsed = ast.literal_eval(text) if text.startswith(("[", "(")) else text.split(",")
+        gene = [int(item) for item in parsed]
+    else:
+        gene = [int(item) for item in value]
+
+    if len(gene) != 28:
+        raise ValueError(f"BASS gene must contain 28 integers, got {len(gene)}")
+
+    bad_values = sorted({value for value in gene if value < 0 or value > 7})
+    if bad_values:
+        raise ValueError(f"BASS gene values must be in [0, 7], got {bad_values}")
+
+    return gene
+
+
+def load_bass_gene_file(path: str | Path) -> list[int]:
+    path = Path(path)
+    with path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+
+    if isinstance(payload, dict):
+        if "gene" not in payload:
+            raise ValueError(f"BASS gene file {path} must contain key 'gene'")
+        return parse_bass_gene(payload["gene"])
+
+    return parse_bass_gene(payload)
+
+
+def build_bass_model(
+    gene: list[int],
+    *,
+    scale: int,
+    channels: int,
+) -> tf.keras.Model:
+    from search_space.model_builder import get_model
+    from search_space.search_space import decode
+
+    return get_model(
+        decode(parse_bass_gene(gene)),
+        upscale_factor=scale,
+        channels=channels,
+    )
+
+
+def load_custom_keras_model(path: str | Path) -> tf.keras.Model:
+    import search_space.model_builder  # noqa: F401
+
+    return tf.keras.models.load_model(path, compile=False)
+
+
 def load_or_build_model(model_cfg, data_cfg) -> tf.keras.Model:
     if model_cfg.custom_model_path:
-        return tf.keras.models.load_model(model_cfg.custom_model_path, compile=False)
+        return load_custom_keras_model(model_cfg.custom_model_path)
+
+    if model_cfg.bass_gene_file:
+        return build_bass_model(
+            load_bass_gene_file(model_cfg.bass_gene_file),
+            scale=data_cfg.scale,
+            channels=data_cfg.channels,
+        )
+
+    if model_cfg.bass_gene:
+        return build_bass_model(
+            parse_bass_gene(model_cfg.bass_gene),
+            scale=data_cfg.scale,
+            channels=data_cfg.channels,
+        )
 
     if model_cfg.model_type != "residual_sr":
         raise ValueError(

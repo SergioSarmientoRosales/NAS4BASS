@@ -147,6 +147,57 @@ class ArtifactValidationTests(unittest.TestCase):
         self.assertEqual(len(report.warnings), 1)
         self.assertIn("duplicate architecture", report.warnings[0])
 
+    def test_bass_sampler_writes_trainer_manifest_without_psnr(self):
+        repo_root = Path(__file__).resolve().parents[1]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            arch_csv = tmp / "architectures.csv"
+            manifest_csv = tmp / "manifest.csv"
+            metadata_json = tmp / "metadata.json"
+            genes_dir = tmp / "genes"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "tools/sample_bass_architectures.py",
+                    "--n",
+                    "6",
+                    "--pool-size",
+                    "80",
+                    "--seed",
+                    "123",
+                    "--output-csv",
+                    str(arch_csv),
+                    "--trainer-manifest",
+                    str(manifest_csv),
+                    "--metadata-json",
+                    str(metadata_json),
+                    "--gene-json-dir",
+                    str(genes_dir),
+                ],
+                cwd=repo_root,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+
+            with arch_csv.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            genes = {row["Net"] for row in rows}
+            self.assertEqual(len(rows), 6)
+            self.assertEqual(len(genes), 6)
+            self.assertFalse(any("psnr" in column.lower() for column in rows[0]))
+
+            with manifest_csv.open(newline="", encoding="utf-8") as handle:
+                manifest = list(csv.DictReader(handle))
+            self.assertEqual(len(manifest), 6)
+            self.assertIn("--bass-gene-file", manifest[0]["train_command"])
+            self.assertTrue(Path(manifest[0]["bass_gene_file"]).exists())
+
 
 if __name__ == "__main__":
     unittest.main()
