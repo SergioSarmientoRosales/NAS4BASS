@@ -10,7 +10,7 @@ from config import DEFAULT_POP_SIZE, DEFAULT_ENSEMBLE_METHOD
 from utils.seed import set_global_seed
 
 from core.problem import NASProblem
-from core.registry import build_search_method, build_evaluator
+from core.registry import SEARCH_CLI_CHOICES, build_search_method, build_evaluator
 
 
 def parse_ensemble_weights(text: str | None) -> list[float] | dict[str, float] | None:
@@ -112,7 +112,7 @@ def parse_args():
         "--search",
         type=str,
         default="nsga3",
-        choices=["nsga3", "random"],
+        choices=SEARCH_CLI_CHOICES,
         help="Search method",
     )
 

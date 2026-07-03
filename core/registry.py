@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-SEARCH_REGISTRY = {"nsga3", "random"}
+SEARCH_REGISTRY = {"nsga3", "random", "cmopso", "imia", "sms_emoa"}
+SEARCH_ALIASES = {
+    "sms-emoa": "sms_emoa",
+}
+SEARCH_CLI_CHOICES = tuple(sorted(SEARCH_REGISTRY | set(SEARCH_ALIASES)))
+EARLY_STOP_CAPABLE_SEARCHES = {"nsga3"}
 
 EVALUATOR_REGISTRY = {"model_based", "zero_cost"}
 
@@ -18,11 +23,18 @@ def build_search_method(
     early_stop_repeat_patience: int = 10,
 ):
     name = name.lower()
+    name = SEARCH_ALIASES.get(name, name)
 
     if name not in SEARCH_REGISTRY:
         raise ValueError(
             f"Unknown search method '{name}'. "
-            f"Available options: {sorted(SEARCH_REGISTRY)}"
+            f"Available options: {sorted(SEARCH_CLI_CHOICES)}"
+        )
+
+    if early_stop and name not in EARLY_STOP_CAPABLE_SEARCHES:
+        raise ValueError(
+            f"--early-stop is currently implemented only for "
+            f"{sorted(EARLY_STOP_CAPABLE_SEARCHES)}; got '{name}'."
         )
 
     if name == "nsga3":
@@ -33,20 +45,40 @@ def build_search_method(
         from search.random_search import RandomSearch
 
         search_cls = RandomSearch
+    elif name == "cmopso":
+        from search.cmopso import CMOPSO
+
+        search_cls = CMOPSO
+    elif name == "imia":
+        from search.imia import IMIA
+
+        search_cls = IMIA
+    elif name == "sms_emoa":
+        from search.sms_emoa import SMSEMOA
+
+        search_cls = SMSEMOA
     else:
         raise RuntimeError(f"Unhandled search method '{name}'")
 
-    return search_cls(
-        problem=problem,
-        pop_size=pop_size,
-        n_gen=n_gen,
-        verbose=verbose,
-        output_file=output_file,
-        save_flush_every=save_flush_every,
-        early_stop=early_stop,
-        early_stop_min_gen=early_stop_min_gen,
-        early_stop_repeat_patience=early_stop_repeat_patience,
-    )
+    kwargs = {
+        "problem": problem,
+        "pop_size": pop_size,
+        "n_gen": n_gen,
+        "verbose": verbose,
+        "output_file": output_file,
+    }
+
+    if name in {"nsga3", "random"}:
+        kwargs.update(
+            {
+                "save_flush_every": save_flush_every,
+                "early_stop": early_stop,
+                "early_stop_min_gen": early_stop_min_gen,
+                "early_stop_repeat_patience": early_stop_repeat_patience,
+            }
+        )
+
+    return search_cls(**kwargs)
 
 
 def build_evaluator(

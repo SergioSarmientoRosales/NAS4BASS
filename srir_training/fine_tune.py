@@ -7,6 +7,7 @@ from pathlib import Path
 
 import tensorflow as tf
 
+from srir_training.autosize import resolve_auto_data_config
 from srir_training.config import TrainConfig, load_config, save_config, validate_config
 from srir_training.data import build_train_val_datasets
 from srir_training.train import compile_model, save_history_json
@@ -58,14 +59,20 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--pattern", default="**/best.keras", help="Glob pattern inside --models-dir")
     parser.add_argument("--max-models", type=int, default=None, help="Optional cap for quick trials")
 
+    parser.add_argument("--directory-train", "--train-dir", dest="directory_train", default=None)
+    parser.add_argument("--directory-val", "--val-dir", dest="directory_val", default=None)
     parser.add_argument("--train-lr-dir", default=None)
     parser.add_argument("--train-hr-dir", default=None)
     parser.add_argument("--val-lr-dir", default=None)
     parser.add_argument("--val-hr-dir", default=None)
     parser.add_argument("--scale", type=int, choices=[2, 3, 4], default=None)
-    parser.add_argument("--patch-size", type=int, default=None, help="HR patch size")
+    parser.add_argument("--patch-size", type=int, default=None, help="HR patch size; omit for GPU-aware auto sizing")
     parser.add_argument("--channels", type=int, choices=[1, 3], default=None)
-    parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--batch-size", type=int, default=None, help="Batch size; omit for GPU-aware auto sizing")
+    parser.add_argument("--min-patch-size", type=int, default=None)
+    parser.add_argument("--max-patch-size", type=int, default=None)
+    parser.add_argument("--max-batch-size", type=int, default=None)
+    parser.add_argument("--downsample-method", choices=["area", "bicubic", "bilinear", "lanczos3", "lanczos5"], default=None)
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--learning-rate", type=float, default=None)
     parser.add_argument("--lr-schedule", choices=["plateau", "cosine", "none"], default=None)
@@ -105,6 +112,8 @@ def fine_tune_config_from_args(args) -> TrainConfig:
         cfg.runtime.output_dir = "srir_finetune_outputs"
 
     overrides = {
+        ("data", "directory_train"): args.directory_train,
+        ("data", "directory_val"): args.directory_val,
         ("data", "train_lr_dir"): args.train_lr_dir,
         ("data", "train_hr_dir"): args.train_hr_dir,
         ("data", "val_lr_dir"): args.val_lr_dir,
@@ -113,6 +122,10 @@ def fine_tune_config_from_args(args) -> TrainConfig:
         ("data", "patch_size"): args.patch_size,
         ("data", "channels"): args.channels,
         ("data", "batch_size"): args.batch_size,
+        ("data", "min_patch_size"): args.min_patch_size,
+        ("data", "max_patch_size"): args.max_patch_size,
+        ("data", "max_batch_size"): args.max_batch_size,
+        ("data", "downsample_method"): args.downsample_method,
         ("data", "lr_suffix"): args.lr_suffix,
         ("training", "epochs"): args.epochs,
         ("training", "learning_rate"): args.learning_rate,
@@ -252,6 +265,8 @@ def main(argv: list[str] | None = None) -> int:
         mixed_precision=cfg.runtime.mixed_precision,
         enable_xla=cfg.runtime.enable_xla,
     )
+    resolve_auto_data_config(cfg.data, cfg.model, cfg.runtime)
+    validate_config(cfg)
 
     model_paths = discover_best_models(args.models_dir, pattern=args.pattern)
     if args.max_models is not None:
@@ -263,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
     save_json(runtime_info, base_run_dir / "runtime.json")
 
     print(f"[FINETUNE] Found {len(model_paths)} model(s)")
-    print("[DATA] Building DIV2K-style paired LR/HR datasets")
+    print("[DATA] Building DIV2K-style train/validation datasets")
     train_ds, val_ds, train_info, val_info = build_train_val_datasets(
         cfg.data,
         seed=cfg.runtime.seed,

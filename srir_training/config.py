@@ -9,19 +9,25 @@ from typing import Any
 
 @dataclass
 class DataConfig:
+    directory_train: str = ""
+    directory_val: str = ""
     train_lr_dir: str = ""
     train_hr_dir: str = ""
     val_lr_dir: str = ""
     val_hr_dir: str = ""
     scale: int = 2
-    patch_size: int = 96
+    patch_size: int | None = None
     channels: int = 3
-    batch_size: int = 16
+    batch_size: int | None = None
+    min_patch_size: int = 64
+    max_patch_size: int = 128
+    max_batch_size: int = 16
     repeats_per_image: int = 8
     cache: bool = False
     shuffle_buffer: int = 512
     augment: bool = True
     lr_suffix: str | None = None
+    downsample_method: str = "bicubic"
 
 
 @dataclass
@@ -131,12 +137,21 @@ def load_config(path: str | None) -> TrainConfig:
 def validate_config(cfg: TrainConfig) -> None:
     if cfg.data.scale not in {2, 3, 4}:
         raise ValueError("scale must be one of 2, 3, or 4")
-    if cfg.data.patch_size <= 0 or cfg.data.patch_size % cfg.data.scale != 0:
-        raise ValueError("patch_size must be positive and divisible by scale")
+    if cfg.data.patch_size is not None:
+        if cfg.data.patch_size <= 0 or cfg.data.patch_size % cfg.data.scale != 0:
+            raise ValueError("patch_size must be positive and divisible by scale")
     if cfg.data.channels not in {1, 3}:
         raise ValueError("channels must be 1 or 3")
-    if cfg.data.batch_size <= 0:
+    if cfg.data.batch_size is not None and cfg.data.batch_size <= 0:
         raise ValueError("batch_size must be positive")
+    if cfg.data.min_patch_size <= 0:
+        raise ValueError("min_patch_size must be positive")
+    if cfg.data.max_patch_size < cfg.data.min_patch_size:
+        raise ValueError("max_patch_size must be greater than or equal to min_patch_size")
+    if cfg.data.max_batch_size <= 0:
+        raise ValueError("max_batch_size must be positive")
+    if cfg.data.downsample_method not in {"area", "bicubic", "bilinear", "lanczos3", "lanczos5"}:
+        raise ValueError("downsample_method must be one of: area, bicubic, bilinear, lanczos3, lanczos5")
     if cfg.data.repeats_per_image <= 0:
         raise ValueError("repeats_per_image must be positive")
     if cfg.model.residual_scale <= 0:
@@ -189,14 +204,20 @@ def save_config(cfg: TrainConfig, path: str | Path) -> None:
 def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="Train SRIR CNN models with TensorFlow/Keras.")
     parser.add_argument("--config", default=None, help="Optional JSON config file")
+    parser.add_argument("--directory-train", "--train-dir", dest="directory_train", default=None)
+    parser.add_argument("--directory-val", "--val-dir", dest="directory_val", default=None)
     parser.add_argument("--train-lr-dir", default=None)
     parser.add_argument("--train-hr-dir", default=None)
     parser.add_argument("--val-lr-dir", default=None)
     parser.add_argument("--val-hr-dir", default=None)
     parser.add_argument("--scale", type=int, choices=[2, 3, 4], default=None)
-    parser.add_argument("--patch-size", type=int, default=None, help="HR patch size")
+    parser.add_argument("--patch-size", type=int, default=None, help="HR patch size; omit for GPU-aware auto sizing")
     parser.add_argument("--channels", type=int, choices=[1, 3], default=None)
-    parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--batch-size", type=int, default=None, help="Batch size; omit for GPU-aware auto sizing")
+    parser.add_argument("--min-patch-size", type=int, default=None)
+    parser.add_argument("--max-patch-size", type=int, default=None)
+    parser.add_argument("--max-batch-size", type=int, default=None)
+    parser.add_argument("--downsample-method", choices=["area", "bicubic", "bilinear", "lanczos3", "lanczos5"], default=None)
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--learning-rate", type=float, default=None)
     parser.add_argument("--lr-schedule", choices=["plateau", "cosine", "none"], default=None)
@@ -232,6 +253,8 @@ def config_from_args(argv: list[str] | None = None) -> TrainConfig:
     cfg = load_config(args.config)
 
     overrides = {
+        ("data", "directory_train"): args.directory_train,
+        ("data", "directory_val"): args.directory_val,
         ("data", "train_lr_dir"): args.train_lr_dir,
         ("data", "train_hr_dir"): args.train_hr_dir,
         ("data", "val_lr_dir"): args.val_lr_dir,
@@ -240,6 +263,10 @@ def config_from_args(argv: list[str] | None = None) -> TrainConfig:
         ("data", "patch_size"): args.patch_size,
         ("data", "channels"): args.channels,
         ("data", "batch_size"): args.batch_size,
+        ("data", "min_patch_size"): args.min_patch_size,
+        ("data", "max_patch_size"): args.max_patch_size,
+        ("data", "max_batch_size"): args.max_batch_size,
+        ("data", "downsample_method"): args.downsample_method,
         ("data", "lr_suffix"): args.lr_suffix,
         ("training", "epochs"): args.epochs,
         ("training", "learning_rate"): args.learning_rate,

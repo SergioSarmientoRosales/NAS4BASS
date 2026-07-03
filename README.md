@@ -10,7 +10,7 @@ This repository is useful for:
 
 - Researchers working on NAS for image restoration.
 - Students who want a practical NAS example without starting from scratch.
-- Engineers who want to run a modular NSGA-III search over BASS-like architectures.
+- Engineers who want to run modular multi-objective search over BASS-like architectures.
 - Readers of the related paper who want to reproduce the search and zero-cost predictor analysis.
 
 ## Key Ideas In Plain Language
@@ -28,7 +28,7 @@ Why this matters: training every candidate architecture is expensive; therefore,
 ## Main Features
 
 - Modular BASS-style architecture encoding and decoding.
-- NSGA-III and random-search backends.
+- NSGA-III, SMS-EMOA, CMOPSO, IMIA, and random-search backends.
 - Model-based evaluation with serialized surrogate predictors in `models/`.
 - Zero-cost predictor evaluation, including SynFlow, Fisher, SNIP, GraSP, GradNorm, NWOT, Zen, ZiCo, Jacobian covariance, L2 norm, plain score, and parameter-count baselines.
 - CSV outputs for population histories, non-dominated solutions, and cache summaries.
@@ -43,7 +43,7 @@ NAS4BASS/
   Plots.py                Tables and figures for benchmark outputs
   config.py               Search-space constants and defaults
   core/                   NAS problem and registry wiring
-  search/                 NSGA-III, random search, and operators
+  search/                 NSGA-III, SMS-EMOA, CMOPSO, IMIA, random search, and operators
   search_space/           BASS encoding, decoding, and model builder
   evaluators/             Model-based and zero-cost evaluators
   predictors/             Surrogate model loading, selection, and ensembling
@@ -105,6 +105,9 @@ Important arguments:
 - `--zc-metric` selects a zero-cost metric, for example `synflow`, `fisher`, `snip`, or `param_score`.
 - `--zc-score-transform` selects the raw or normalized score direction used by zero-cost NAS.
 - `--search nsga3` runs NSGA-III.
+- `--search sms_emoa` or `--search sms-emoa` runs SMS-EMOA.
+- `--search cmopso` runs CMOPSO.
+- `--search imia` runs IMIA.
 - `--search random` runs random search.
 - `--n-gen` is required unless `--early-stop` is enabled.
 - `--outdir` controls where generated CSV files are written.
@@ -157,7 +160,8 @@ For the TensorFlow/Keras adaptation rationale, BASS traversal assumptions, score
 
 The standalone `srir_training/` package provides a reusable TensorFlow/Keras
 training pipeline for SRIR CNNs. It supports x2, x3, and x4 paired LR/HR
-training, DIV2K-style filenames, PSNR/SSIM evaluation, checkpointing, resume,
+training or direct DIV2K HR folders such as `/data/DIV2K_train_HR`, automatic
+GPU-aware patch/batch sizing, PSNR/SSIM evaluation, checkpointing, resume,
 fine-tuning from folders of `best.keras` models, CPU fallback, and optional GPU
 mixed precision.
 

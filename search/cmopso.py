@@ -2,8 +2,13 @@ from __future__ import annotations
 import os
 import csv
 import numpy as np
-from tqdm import tqdm
 from search.base import BaseSearch
+from search.progress import tqdm
+
+
+def _primary_score_from_objective(obj):
+    primary_obj = float(obj[0])
+    return -primary_obj if np.isfinite(primary_obj) else np.nan
 
 
 class CMOPSO(BaseSearch):
@@ -191,7 +196,7 @@ class CMOPSO(BaseSearch):
             if not file_exists:
                 writer.writerow([
                     "generation", "individual_id",
-                    "decoded_architecture", "predicted_psnr", "params"
+                    "decoded_architecture", "primary_score", "params"
                 ])
 
             for i, (x, obj) in enumerate(zip(positions, objectives)):
@@ -200,7 +205,7 @@ class CMOPSO(BaseSearch):
                     generation,
                     i,
                     " ".join(map(str, decoded)),
-                    float(obj[0]),
+                    _primary_score_from_objective(obj),
                     int(obj[1]),
                 ])
 

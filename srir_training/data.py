@@ -26,6 +26,12 @@ class ImagePair:
 
 
 @dataclass(frozen=True)
+class HRImage:
+    key: str
+    hr_path: str
+
+
+@dataclass(frozen=True)
 class DatasetInfo:
     pairs: int
     examples_per_epoch: int
@@ -50,6 +56,13 @@ def _list_images(directory: str) -> list[Path]:
     if not root.exists():
         raise FileNotFoundError(f"Image directory does not exist: {directory}")
     return sorted(path for path in root.iterdir() if _is_image(path))
+
+
+def _require_resolved(cfg: DataConfig) -> None:
+    if cfg.patch_size is None:
+        raise ValueError("patch_size must be resolved before building datasets")
+    if cfg.batch_size is None:
+        raise ValueError("batch_size must be resolved before building datasets")
 
 
 def collect_image_pairs(
@@ -96,6 +109,22 @@ def collect_image_pairs(
     ]
 
 
+def collect_hr_images(hr_dir: str) -> list[HRImage]:
+    hr_paths = _list_images(hr_dir)
+    if not hr_paths:
+        raise ValueError(f"No HR images found in {hr_dir}")
+
+    images = []
+    seen = set()
+    for path in hr_paths:
+        key = path.stem
+        if key in seen:
+            raise ValueError(f"Duplicate HR key '{key}' in {hr_dir}")
+        seen.add(key)
+        images.append(HRImage(key=key, hr_path=str(path)))
+    return images
+
+
 def decode_image(path: tf.Tensor, *, channels: int) -> tf.Tensor:
     data = tf.io.read_file(path)
     image = tf.image.decode_image(data, channels=channels, expand_animations=False)
@@ -122,10 +151,23 @@ def _load_pair(lr_path: tf.Tensor, hr_path: tf.Tensor, cfg: DataConfig):
     return align_lr_hr(lr, hr, scale=cfg.scale)
 
 
+def _load_hr(hr_path: tf.Tensor, cfg: DataConfig):
+    hr = decode_image(hr_path, channels=cfg.channels)
+    shape = tf.shape(hr)
+    hr_h = (shape[0] // cfg.scale) * cfg.scale
+    hr_w = (shape[1] // cfg.scale) * cfg.scale
+    return hr[:hr_h, :hr_w, :]
+
+
 def _pair_is_large_enough(lr: tf.Tensor, cfg: DataConfig) -> tf.Tensor:
     lr_patch = cfg.patch_size // cfg.scale
     shape = tf.shape(lr)
     return tf.logical_and(shape[0] >= lr_patch, shape[1] >= lr_patch)
+
+
+def _hr_is_large_enough(hr: tf.Tensor, cfg: DataConfig) -> tf.Tensor:
+    shape = tf.shape(hr)
+    return tf.logical_and(shape[0] >= cfg.patch_size, shape[1] >= cfg.patch_size)
 
 
 def _dummy_pair(cfg: DataConfig) -> tuple[tf.Tensor, tf.Tensor]:
@@ -142,6 +184,19 @@ def _set_pair_shapes(lr: tf.Tensor, hr: tf.Tensor, cfg: DataConfig):
     return lr, hr
 
 
+def _downsample_hr_crop(hr: tf.Tensor, cfg: DataConfig) -> tf.Tensor:
+    lr_patch = cfg.patch_size // cfg.scale
+    lr = tf.image.resize(
+        hr,
+        [lr_patch, lr_patch],
+        method=cfg.downsample_method,
+        antialias=True,
+    )
+    lr = tf.clip_by_value(lr, 0.0, 1.0)
+    lr.set_shape([lr_patch, lr_patch, cfg.channels])
+    return lr
+
+
 def make_paired_dataset(
     pairs: list[ImagePair],
     cfg: DataConfig,
@@ -149,6 +204,7 @@ def make_paired_dataset(
     training: bool,
     seed: int,
 ) -> tuple[tf.data.Dataset, DatasetInfo]:
+    _require_resolved(cfg)
     if not pairs:
         raise ValueError("Cannot build a dataset from an empty pair list")
 
@@ -231,22 +287,137 @@ def make_paired_dataset(
     return ds, info
 
 
-def build_train_val_datasets(cfg: DataConfig, *, seed: int):
-    train_pairs = collect_image_pairs(
-        cfg.train_lr_dir,
-        cfg.train_hr_dir,
-        scale=cfg.scale,
-        lr_suffix=cfg.lr_suffix,
-    )
-    val_pairs = collect_image_pairs(
-        cfg.val_lr_dir,
-        cfg.val_hr_dir,
-        scale=cfg.scale,
-        lr_suffix=cfg.lr_suffix,
-    )
+def make_hr_only_dataset(
+    images: list[HRImage],
+    cfg: DataConfig,
+    *,
+    training: bool,
+    seed: int,
+) -> tuple[tf.data.Dataset, DatasetInfo]:
+    _require_resolved(cfg)
+    if not images:
+        raise ValueError("Cannot build a dataset from an empty HR image list")
 
-    train_ds, train_info = make_paired_dataset(train_pairs, cfg, training=True, seed=seed)
-    val_ds, val_info = make_paired_dataset(val_pairs, cfg, training=False, seed=seed + 1)
+    hr_paths = [image.hr_path for image in images]
+    ds = tf.data.Dataset.from_tensor_slices(hr_paths)
+    examples_per_epoch = len(images)
+
+    if training:
+        ds = ds.shuffle(
+            buffer_size=min(max(cfg.shuffle_buffer, 1), len(images)),
+            seed=seed,
+            reshuffle_each_iteration=True,
+        )
+        ds = ds.flat_map(lambda hr_path: tf.data.Dataset.from_tensors(hr_path).repeat(cfg.repeats_per_image))
+        ds = ds.repeat()
+        examples_per_epoch = len(images) * cfg.repeats_per_image
+
+    counter = tf.data.experimental.Counter()
+    ds = tf.data.Dataset.zip((ds, counter))
+
+    def map_hr(hr_path, idx):
+        hr = _load_hr(hr_path, cfg)
+        ok = _hr_is_large_enough(hr, cfg)
+        sample_seed = tf.stack(
+            [tf.cast(seed, tf.int32), tf.cast(idx % (2**31 - 1), tf.int32)]
+        )
+
+        def make_real_pair():
+            if training:
+                hr_shape = tf.shape(hr)
+                max_y = hr_shape[0] - cfg.patch_size + 1
+                max_x = hr_shape[1] - cfg.patch_size + 1
+                y = tf.random.stateless_uniform(
+                    [],
+                    seed=sample_seed,
+                    minval=0,
+                    maxval=max_y,
+                    dtype=tf.int32,
+                )
+                x = tf.random.stateless_uniform(
+                    [],
+                    seed=sample_seed + tf.constant([17, 29], dtype=tf.int32),
+                    minval=0,
+                    maxval=max_x,
+                    dtype=tf.int32,
+                )
+                hr_crop = hr[y:y + cfg.patch_size, x:x + cfg.patch_size, :]
+            else:
+                hr_shape = tf.shape(hr)
+                y = tf.maximum(0, (hr_shape[0] - cfg.patch_size) // 2)
+                x = tf.maximum(0, (hr_shape[1] - cfg.patch_size) // 2)
+                hr_crop = hr[y:y + cfg.patch_size, x:x + cfg.patch_size, :]
+
+            lr_crop = _downsample_hr_crop(hr_crop, cfg)
+            if training and cfg.augment:
+                lr_crop, hr_crop = paired_stateless_augment(
+                    lr_crop,
+                    hr_crop,
+                    seed=sample_seed + tf.constant([101, 313], dtype=tf.int32),
+                )
+            return lr_crop, hr_crop
+
+        lr_out, hr_out = tf.cond(ok, make_real_pair, lambda: _dummy_pair(cfg))
+        lr_out, hr_out = _set_pair_shapes(lr_out, hr_out, cfg)
+        return lr_out, hr_out, ok
+
+    ds = ds.map(map_hr, num_parallel_calls=AUTOTUNE)
+    ds = ds.filter(lambda lr, hr, ok: ok)
+    ds = ds.map(lambda lr, hr, ok: (lr, hr), num_parallel_calls=AUTOTUNE)
+
+    if cfg.cache and not training:
+        ds = ds.cache()
+
+    ds = ds.batch(cfg.batch_size, drop_remainder=training)
+    ds = ds.prefetch(AUTOTUNE)
+
+    steps = max(1, examples_per_epoch // cfg.batch_size) if training else None
+    info = DatasetInfo(
+        pairs=len(images),
+        examples_per_epoch=examples_per_epoch,
+        batch_size=cfg.batch_size,
+        steps=steps,
+    )
+    return ds, info
+
+
+def build_train_val_datasets(cfg: DataConfig, *, seed: int):
+    _require_resolved(cfg)
+    train_hr_dir = cfg.train_hr_dir or cfg.directory_train
+    val_hr_dir = cfg.val_hr_dir or cfg.directory_val
+    paired_mode = bool(cfg.train_lr_dir or cfg.val_lr_dir)
+
+    if paired_mode:
+        if not (cfg.train_lr_dir and cfg.val_lr_dir and train_hr_dir and val_hr_dir):
+            raise ValueError(
+                "Paired LR/HR mode requires train_lr_dir, train_hr_dir, "
+                "val_lr_dir, and val_hr_dir."
+            )
+        train_pairs = collect_image_pairs(
+            cfg.train_lr_dir,
+            train_hr_dir,
+            scale=cfg.scale,
+            lr_suffix=cfg.lr_suffix,
+        )
+        val_pairs = collect_image_pairs(
+            cfg.val_lr_dir,
+            val_hr_dir,
+            scale=cfg.scale,
+            lr_suffix=cfg.lr_suffix,
+        )
+        train_ds, train_info = make_paired_dataset(train_pairs, cfg, training=True, seed=seed)
+        val_ds, val_info = make_paired_dataset(val_pairs, cfg, training=False, seed=seed + 1)
+        return train_ds, val_ds, train_info, val_info
+
+    if not (train_hr_dir and val_hr_dir):
+        raise ValueError(
+            "HR-only mode requires directory_train/train_hr_dir and directory_val/val_hr_dir."
+        )
+
+    train_images = collect_hr_images(train_hr_dir)
+    val_images = collect_hr_images(val_hr_dir)
+    train_ds, train_info = make_hr_only_dataset(train_images, cfg, training=True, seed=seed)
+    val_ds, val_info = make_hr_only_dataset(val_images, cfg, training=False, seed=seed + 1)
     return train_ds, val_ds, train_info, val_info
 
 

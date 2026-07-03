@@ -32,6 +32,9 @@ NAS4BASS/
 - `core/problem.py`: defines the NAS optimization problem and objective computation.
 - `core/registry.py`: maps CLI names to search methods and evaluators.
 - `search/nsga3.py`: NSGA-III search implementation.
+- `search/sms_emoa.py`: SMS-EMOA search implementation.
+- `search/cmopso.py`: CMOPSO search implementation.
+- `search/imia.py`: island-based multi-indicator search implementation.
 - `search/random_search.py`: random-search implementation.
 - `search/operators.py`: selection, crossover, and mutation.
 

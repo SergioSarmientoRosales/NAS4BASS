@@ -49,6 +49,9 @@ Example:
 python main.py --eval model_based --search nsga3 --seed 1 --pop-size 100 --n-gen 500
 ```
 
+Other search methods are available through `--search random`, `--search sms_emoa`
+or `--search sms-emoa`, `--search cmopso`, and `--search imia`.
+
 Use `--outdir` if you want outputs somewhere else:
 
 ```bash

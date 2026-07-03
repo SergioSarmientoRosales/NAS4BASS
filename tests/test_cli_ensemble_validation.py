@@ -33,6 +33,44 @@ class CliAndEnsembleTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertIn("--ensemble-weights", result.stdout)
+        self.assertIn("cmopso", result.stdout)
+        self.assertIn("imia", result.stdout)
+        self.assertIn("sms_emoa", result.stdout)
+
+    def test_search_registry_exposes_new_methods(self):
+        from core.registry import SEARCH_CLI_CHOICES, build_search_method
+
+        self.assertIn("cmopso", SEARCH_CLI_CHOICES)
+        self.assertIn("imia", SEARCH_CLI_CHOICES)
+        self.assertIn("sms_emoa", SEARCH_CLI_CHOICES)
+        self.assertIn("sms-emoa", SEARCH_CLI_CHOICES)
+
+        dummy_problem = object()
+        cases = {
+            "cmopso": "CMOPSO",
+            "imia": "IMIA",
+            "sms-emoa": "SMSEMOA",
+        }
+        for search_name, class_name in cases.items():
+            search = build_search_method(
+                search_name,
+                problem=dummy_problem,
+                pop_size=10,
+                n_gen=1,
+            )
+            self.assertEqual(type(search).__name__, class_name)
+
+    def test_early_stop_rejects_searches_without_support(self):
+        from core.registry import build_search_method
+
+        with self.assertRaises(ValueError):
+            build_search_method(
+                "cmopso",
+                problem=object(),
+                pop_size=10,
+                n_gen=1,
+                early_stop=True,
+            )
 
     def test_parse_named_and_positional_ensemble_weights(self):
         from main import parse_ensemble_weights

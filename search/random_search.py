@@ -3,9 +3,9 @@ from __future__ import annotations
 import os
 import csv
 import numpy as np
-from tqdm import tqdm
 
 from search.base import BaseSearch
+from search.progress import tqdm
 
 
 def _primary_score_from_objective(obj):

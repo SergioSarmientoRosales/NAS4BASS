@@ -8,6 +8,8 @@ the NAS search code, but it is ready to accept BASS/NAS-generated Keras models.
 
 - Scale factors x2, x3, and x4.
 - Paired LR/HR folders, including DIV2K-style names such as `0001x2.png` and `0001.png`.
+- Direct DIV2K HR folders with on-the-fly LR generation by downsampling.
+- GPU-aware automatic `patch_size` and `batch_size` defaults.
 - Default lightweight residual SR model without BatchNorm.
 - Custom user-provided Keras models through `--custom-model-path`.
 - Normalized image range `[0, 1]`.
@@ -49,7 +51,20 @@ repository requirements remain the source of truth.
 
 ## DIV2K-Style Data
 
-Expected paired folder structure:
+Two data modes are supported.
+
+Direct HR-only DIV2K folders:
+
+```text
+directory_train = "/data/DIV2K_train_HR"
+directory_val   = "/data/DIV2K_valid_HR"
+```
+
+In this mode, LR inputs are generated on the fly from HR crops using the selected
+scale and `--downsample-method bicubic` by default. This is the shortest Docker
+path style and avoids storing duplicated LR folders.
+
+Paired LR/HR folder structure:
 
 ```text
 DIV2K/
@@ -96,6 +111,12 @@ measures the restoration error. Adam or AdamW is the optimizer; it decides how
 weights are updated from gradients. The default is Charbonnier loss with AdamW,
 which is a stable SRIR starting point.
 
+`patch_size` and `batch_size` are automatic by default. The trainer checks the
+available GPU memory when possible and writes the resolved values into the saved
+`config.json`. Explicit `--patch-size` or `--batch-size` values still override
+the automatic choice. Use `--max-batch-size` or `--max-patch-size` as safety caps
+for unknown/custom models.
+
 The default learning-rate policy is dynamic plateau reduction:
 
 - Monitor: `val_psnr`
@@ -110,17 +131,13 @@ learning rate is reduced only after 15 validation epochs in a row fail to improv
 the monitored metric. A non-finite loss still stops training through
 `TerminateOnNaN`.
 
-Example x2 training run:
+Example x2 training run with direct DIV2K HR folders:
 
 ```bash
 python -m srir_training.train ^
-  --train-lr-dir C:\data\DIV2K_train_LR_bicubic\X2 ^
-  --train-hr-dir C:\data\DIV2K_train_HR ^
-  --val-lr-dir C:\data\DIV2K_valid_LR_bicubic\X2 ^
-  --val-hr-dir C:\data\DIV2K_valid_HR ^
+  --directory-train C:\data\DIV2K_train_HR ^
+  --directory-val C:\data\DIV2K_valid_HR ^
   --scale 2 ^
-  --patch-size 96 ^
-  --batch-size 16 ^
   --epochs 100 ^
   --output-dir srir_outputs
 ```
@@ -129,15 +146,23 @@ Linux/macOS:
 
 ```bash
 python -m srir_training.train \
+  --directory-train /data/DIV2K_train_HR \
+  --directory-val /data/DIV2K_valid_HR \
+  --scale 2 \
+  --epochs 100 \
+  --output-dir srir_outputs
+```
+
+Paired LR/HR folders remain available when you want fixed precomputed LR images:
+
+```bash
+python -m srir_training.train \
   --train-lr-dir /data/DIV2K_train_LR_bicubic/X2 \
   --train-hr-dir /data/DIV2K_train_HR \
   --val-lr-dir /data/DIV2K_valid_LR_bicubic/X2 \
   --val-hr-dir /data/DIV2K_valid_HR \
   --scale 2 \
-  --patch-size 96 \
-  --batch-size 16 \
-  --epochs 100 \
-  --output-dir srir_outputs
+  --epochs 100
 ```
 
 Optional warmup cosine LR instead of plateau:
@@ -162,6 +187,9 @@ The HR patch size must be divisible by the scale. For example:
 - x3: `--patch-size 96`
 - x4: `--patch-size 128`
 
+When omitted, the automatic resolver chooses a divisible patch size for the
+selected scale.
+
 ## Resume
 
 ```bash
@@ -177,13 +205,9 @@ Fine-tune every `best.keras` found recursively under a folder:
 ```bash
 python -m srir_training.fine_tune \
   --models-dir srir_outputs \
-  --train-lr-dir /data/DIV2K_train_LR_bicubic/X2 \
-  --train-hr-dir /data/DIV2K_train_HR \
-  --val-lr-dir /data/DIV2K_valid_LR_bicubic/X2 \
-  --val-hr-dir /data/DIV2K_valid_HR \
+  --directory-train /data/DIV2K_train_HR \
+  --directory-val /data/DIV2K_valid_HR \
   --scale 2 \
-  --patch-size 96 \
-  --batch-size 8 \
   --epochs 50 \
   --learning-rate 2e-5 \
   --output-dir srir_finetune_outputs

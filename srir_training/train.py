@@ -5,8 +5,9 @@ from pathlib import Path
 
 import tensorflow as tf
 
+from srir_training.autosize import resolve_auto_data_config
 from srir_training.callbacks import build_callbacks
-from srir_training.config import config_from_args, save_config
+from srir_training.config import config_from_args, save_config, validate_config
 from srir_training.data import build_train_val_datasets
 from srir_training.losses import get_loss
 from srir_training.metrics import default_metrics
@@ -64,10 +65,12 @@ def main(argv: list[str] | None = None) -> int:
         mixed_precision=cfg.runtime.mixed_precision,
         enable_xla=cfg.runtime.enable_xla,
     )
+    resolve_auto_data_config(cfg.data, cfg.model, cfg.runtime)
+    validate_config(cfg)
     save_config(cfg, run_dir / "config.json")
     save_json(runtime_info, run_dir / "runtime.json")
 
-    print("[DATA] Building DIV2K-style paired LR/HR datasets")
+    print("[DATA] Building DIV2K-style train/validation datasets")
     train_ds, val_ds, train_info, val_info = build_train_val_datasets(
         cfg.data,
         seed=cfg.runtime.seed,
