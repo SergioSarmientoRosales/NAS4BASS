@@ -11,7 +11,8 @@ Use it for:
 - DIV2K-style paired LR/HR folders.
 - Direct DIV2K HR-only folders, for example `/data/DIV2K_train_HR` and
   `/data/DIV2K_valid_HR`, with LR generated on the fly.
-- GPU-aware automatic `patch_size` and `batch_size` defaults.
+- Stage 1 reference defaults (`patch_size=64`, `batch_size=64`) with optional
+  GPU-aware automatic sizing through `--auto-size`.
 - A default residual CNN baseline.
 - User-provided Keras models.
 - Future BASS/NAS-generated Keras models.
@@ -22,10 +23,18 @@ dynamic by default through `ReduceLROnPlateau` on `val_psnr`, with early stoppin
 patience 20 and LR plateau patience 15 consecutive epochs without improvement.
 Any real `val_psnr` improvement resets the plateau counter.
 
-By default, `patch_size` and `batch_size` are resolved automatically from the
-available GPU memory before training starts. The resolved values are saved in the
-run `config.json`. You can still pass explicit values, or use `--max-batch-size`
-and `--max-patch-size` as caps.
+The standard protocol keeps only the Stage 1-compatible run. It does not launch
+an automatic second Stage 2/p128 training pass. By default x2/x4 use
+`patch_size=64` and `batch_size=64`; x3 uses `patch_size=96` if no explicit
+patch size is provided, because 64 is not divisible by 3. Use `--auto-size` only
+when GPU-aware sizing is preferred over strict reference comparability.
+
+Compared with the reference `.py`, preprocessing is aligned for direct HR-only
+DIV2K training: random HR crops, bicubic LR generation, normalized `[0, 1]`
+images, and paired augmentations. The main documented differences are the
+default Charbonnier loss instead of MSE, `repeats_per_image`-based epoch length
+instead of sliding-window patch-count steps, and center-crop validation instead
+of sliding-window validation patches.
 
 Direct DIV2K HR usage:
 

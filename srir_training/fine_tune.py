@@ -8,7 +8,13 @@ from pathlib import Path
 import tensorflow as tf
 
 from srir_training.autosize import resolve_auto_data_config
-from srir_training.config import TrainConfig, load_config, save_config, validate_config
+from srir_training.config import (
+    TrainConfig,
+    apply_scale_compatible_stage1_default,
+    load_config,
+    save_config,
+    validate_config,
+)
 from srir_training.data import build_train_val_datasets
 from srir_training.train import compile_model, save_history_json
 from srir_training.utils import (
@@ -66,9 +72,10 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--val-lr-dir", default=None)
     parser.add_argument("--val-hr-dir", default=None)
     parser.add_argument("--scale", type=int, choices=[2, 3, 4], default=None)
-    parser.add_argument("--patch-size", type=int, default=None, help="HR patch size; omit for GPU-aware auto sizing")
+    parser.add_argument("--patch-size", type=int, default=None, help="HR patch size; default 64 for Stage 1 reference compatibility")
     parser.add_argument("--channels", type=int, choices=[1, 3], default=None)
-    parser.add_argument("--batch-size", type=int, default=None, help="Batch size; omit for GPU-aware auto sizing")
+    parser.add_argument("--batch-size", type=int, default=None, help="Batch size; default 64 for Stage 1 reference compatibility")
+    parser.add_argument("--auto-size", action="store_true", help="Resolve patch_size and batch_size from available GPU memory")
     parser.add_argument("--min-patch-size", type=int, default=None)
     parser.add_argument("--max-patch-size", type=int, default=None)
     parser.add_argument("--max-batch-size", type=int, default=None)
@@ -162,6 +169,11 @@ def fine_tune_config_from_args(args) -> TrainConfig:
         cfg.data.cache = True
     if args.no_augment:
         cfg.data.augment = False
+    if args.auto_size:
+        cfg.data.patch_size = None
+        cfg.data.batch_size = None
+    elif args.config is None and args.patch_size is None:
+        apply_scale_compatible_stage1_default(cfg)
 
     validate_config(cfg)
     return cfg

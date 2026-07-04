@@ -123,6 +123,36 @@ class CliAndEnsembleTests(unittest.TestCase):
             )
 
 
+class SrirTrainingConfigTests(unittest.TestCase):
+    def test_stage1_reference_defaults_use_patch64_batch64(self):
+        from srir_training.config import TrainConfig, config_from_args
+
+        defaults = TrainConfig.defaults()
+        self.assertEqual(defaults.data.patch_size, 64)
+        self.assertEqual(defaults.data.batch_size, 64)
+
+        parsed = config_from_args([])
+        self.assertEqual(parsed.data.patch_size, 64)
+        self.assertEqual(parsed.data.batch_size, 64)
+
+    def test_auto_size_flag_defers_patch_and_batch_resolution(self):
+        from srir_training.config import config_from_args
+
+        cfg = config_from_args(["--auto-size"])
+
+        self.assertIsNone(cfg.data.patch_size)
+        self.assertIsNone(cfg.data.batch_size)
+
+    def test_scale3_default_patch_remains_divisible(self):
+        from srir_training.config import config_from_args
+
+        cfg = config_from_args(["--scale", "3"])
+
+        self.assertEqual(cfg.data.patch_size, 96)
+        self.assertEqual(cfg.data.patch_size % cfg.data.scale, 0)
+        self.assertEqual(cfg.data.batch_size, 64)
+
+
 class ArtifactValidationTests(unittest.TestCase):
     def test_bass_descriptor_uses_composition_features(self):
         from tools.sample_bass_architectures import descriptor_matrix

@@ -46,7 +46,7 @@ NAS4BASS/
 
 ## SRIR Training
 
-- `srir_training/`: standalone TensorFlow/Keras training and fine-tuning pipeline for x2, x3, and x4 SRIR CNNs.
+- `srir_training/`: standalone TensorFlow/Keras Stage 1-compatible training pipeline for x2, x3, and x4 SRIR CNNs, with optional separate fine-tuning utilities.
 - `docs/srir_training.md`: short integration note for the training package.
 
 ## Evaluators

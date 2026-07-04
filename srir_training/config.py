@@ -16,12 +16,12 @@ class DataConfig:
     val_lr_dir: str = ""
     val_hr_dir: str = ""
     scale: int = 2
-    patch_size: int | None = None
+    patch_size: int | None = 64
     channels: int = 3
-    batch_size: int | None = None
+    batch_size: int | None = 64
     min_patch_size: int = 64
     max_patch_size: int = 128
-    max_batch_size: int = 16
+    max_batch_size: int = 64
     repeats_per_image: int = 8
     cache: bool = False
     shuffle_buffer: int = 512
@@ -203,6 +203,11 @@ def validate_config(cfg: TrainConfig) -> None:
         raise ValueError("mixed_precision must be one of: auto, on, off")
 
 
+def apply_scale_compatible_stage1_default(cfg: TrainConfig) -> None:
+    if cfg.data.patch_size == 64 and cfg.data.scale == 3:
+        cfg.data.patch_size = 96
+
+
 def save_config(cfg: TrainConfig, path: str | Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -220,9 +225,10 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--val-lr-dir", default=None)
     parser.add_argument("--val-hr-dir", default=None)
     parser.add_argument("--scale", type=int, choices=[2, 3, 4], default=None)
-    parser.add_argument("--patch-size", type=int, default=None, help="HR patch size; omit for GPU-aware auto sizing")
+    parser.add_argument("--patch-size", type=int, default=None, help="HR patch size; default 64 for Stage 1 reference compatibility")
     parser.add_argument("--channels", type=int, choices=[1, 3], default=None)
-    parser.add_argument("--batch-size", type=int, default=None, help="Batch size; omit for GPU-aware auto sizing")
+    parser.add_argument("--batch-size", type=int, default=None, help="Batch size; default 64 for Stage 1 reference compatibility")
+    parser.add_argument("--auto-size", action="store_true", help="Resolve patch_size and batch_size from available GPU memory")
     parser.add_argument("--min-patch-size", type=int, default=None)
     parser.add_argument("--max-patch-size", type=int, default=None)
     parser.add_argument("--max-batch-size", type=int, default=None)
@@ -318,6 +324,11 @@ def config_from_args(argv: list[str] | None = None) -> TrainConfig:
         cfg.data.cache = True
     if args.no_augment:
         cfg.data.augment = False
+    if args.auto_size:
+        cfg.data.patch_size = None
+        cfg.data.batch_size = None
+    elif args.config is None and args.patch_size is None:
+        apply_scale_compatible_stage1_default(cfg)
 
     validate_config(cfg)
     return cfg

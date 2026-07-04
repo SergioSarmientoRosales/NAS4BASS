@@ -9,7 +9,7 @@ the NAS search code, but it is ready to accept BASS/NAS-generated Keras models.
 - Scale factors x2, x3, and x4.
 - Paired LR/HR folders, including DIV2K-style names such as `0001x2.png` and `0001.png`.
 - Direct DIV2K HR folders with on-the-fly LR generation by downsampling.
-- GPU-aware automatic `patch_size` and `batch_size` defaults.
+- Stage 1 reference defaults: `patch_size=64` and `batch_size=64`, with optional GPU-aware automatic sizing.
 - Default lightweight residual SR model without BatchNorm.
 - Custom user-provided Keras models through `--custom-model-path`.
 - Normalized image range `[0, 1]`.
@@ -111,11 +111,23 @@ measures the restoration error. Adam or AdamW is the optimizer; it decides how
 weights are updated from gradients. The default is Charbonnier loss with AdamW,
 which is a stable SRIR starting point.
 
-`patch_size` and `batch_size` are automatic by default. The trainer checks the
-available GPU memory when possible and writes the resolved values into the saved
-`config.json`. Explicit `--patch-size` or `--batch-size` values still override
-the automatic choice. Use `--max-batch-size` or `--max-patch-size` as safety caps
-for unknown/custom models.
+The default data geometry is aligned with the Stage 1 training reference:
+`patch_size=64` and `batch_size=64`. For x3, the CLI uses `patch_size=96` when
+no explicit patch size is provided because HR patches must be divisible by the
+scale factor. Explicit `--patch-size` or `--batch-size` values override these
+defaults.
+
+GPU-aware sizing remains available, but it is now opt-in so reference-style
+runs remain comparable:
+
+```bash
+python -m srir_training.train ... --auto-size
+```
+
+When `--auto-size` is used, the trainer checks available GPU memory when
+possible and writes the resolved values into the saved `config.json`. Use
+`--max-batch-size` or `--max-patch-size` as safety caps for unknown/custom
+models.
 
 The default learning-rate policy is dynamic plateau reduction:
 
@@ -130,6 +142,34 @@ This means isolated fluctuations do not trigger a learning-rate drop. The
 learning rate is reduced only after 15 validation epochs in a row fail to improve
 the monitored metric. A non-finite loss still stops training through
 `TerminateOnNaN`.
+
+## Reference Script Coherence
+
+The standard entry point intentionally follows the useful Stage 1 part of the
+reference trainer and does not run an automatic second Stage 2/p128 pass.
+
+Aligned behavior:
+
+- x2/x4 default HR patch and batch sizes match the Stage 1 reference (`64`,
+  `64`).
+- Direct HR-only DIV2K mode samples random HR crops, generates LR crops with
+  bicubic downsampling, normalizes images to `[0, 1]`, and applies paired SR-safe
+  augmentations.
+- Checkpointing, CSV logging, dynamic LR reduction, early stopping, and final
+  PSNR/SSIM reporting are preserved.
+
+Documented differences:
+
+- The default loss remains Charbonnier with AdamW for robustness. The reference
+  script uses MSE with AdamW; pass `--loss mse` when exact loss matching is
+  required.
+- Epoch length is controlled by `repeats_per_image` unless `--steps-per-epoch`
+  is provided. The reference script estimates steps from a sliding-window patch
+  count, so exact training duration matching requires passing explicit
+  `--steps-per-epoch`.
+- Validation uses deterministic center crops by default. The reference script
+  evaluates deterministic sliding-window validation patches; use explicit
+  `--validation-steps` only to cap evaluation, not to reproduce that patch grid.
 
 Example x2 training run with direct DIV2K HR folders:
 
@@ -187,7 +227,8 @@ The HR patch size must be divisible by the scale. For example:
 - x3: `--patch-size 96`
 - x4: `--patch-size 128`
 
-When omitted, the automatic resolver chooses a divisible patch size for the
+When omitted, the Stage 1 default is 64 for x2/x4 and 96 for x3. With
+`--auto-size`, the automatic resolver chooses a divisible patch size for the
 selected scale.
 
 ## Resume
@@ -199,6 +240,10 @@ python -m srir_training.train \
 ```
 
 ## Fine-Tuning Existing `best.keras` Models
+
+Fine-tuning is optional and is not the standard Stage 2/p128 protocol. The main
+trainer stops after the Stage 1-compatible run unless this entry point is called
+explicitly.
 
 Fine-tune every `best.keras` found recursively under a folder:
 
