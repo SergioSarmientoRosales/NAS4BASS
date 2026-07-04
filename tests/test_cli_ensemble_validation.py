@@ -124,6 +124,57 @@ class CliAndEnsembleTests(unittest.TestCase):
 
 
 class ArtifactValidationTests(unittest.TestCase):
+    def test_bass_descriptor_uses_composition_features(self):
+        from tools.sample_bass_architectures import descriptor_matrix
+
+        gene = [0]
+        for _ in range(9):
+            gene.extend([0, 1, 0])
+
+        matrix = descriptor_matrix([tuple(gene)], standardize=False)
+
+        self.assertEqual(matrix.shape, (1, 26))
+        self.assertAlmostEqual(matrix[0, 0], 1.0)
+        self.assertAlmostEqual(matrix[0, 8 + 1], 1.0)
+        self.assertAlmostEqual(matrix[0, 16], 1.0)
+        self.assertAlmostEqual(matrix[0, 24], 16 / 64)
+
+    def test_max_min_can_reuse_pool_standardized_features(self):
+        from tools.sample_bass_architectures import greedy_max_min_select
+
+        genes = [tuple([0] * 28) for _ in range(3)]
+        features = np.asarray(
+            [
+                [0.0, 0.0],
+                [1.0, 0.0],
+                [0.0, 4.0],
+            ],
+            dtype=np.float64,
+        )
+
+        selected, distances = greedy_max_min_select(
+            genes,
+            n_select=2,
+            features=features,
+        )
+
+        self.assertEqual(selected, [0, 2])
+        self.assertAlmostEqual(distances[1], 4.0)
+
+    def test_proxy_alignment_matrix_counts_complexity_by_param_quintile(self):
+        from tools.validate_bass_sample import proxy_alignment_matrix
+
+        complexity_bins = [0, 0, 1, 1, 2]
+        params_real = [10, 100, 1000, 10000, 100000]
+
+        matrix = proxy_alignment_matrix(complexity_bins, params_real, n_bins=3)
+
+        self.assertEqual(len(matrix), 3)
+        self.assertEqual(sum(sum(row) for row in matrix), 5)
+        self.assertEqual(sum(matrix[0]), 2)
+        self.assertEqual(sum(matrix[1]), 2)
+        self.assertEqual(sum(matrix[2]), 1)
+
     def test_validate_csv_accepts_header_and_reports_duplicates(self):
         from tools.validate_artifacts import validate_csv_file
 
@@ -191,12 +242,21 @@ class ArtifactValidationTests(unittest.TestCase):
             self.assertEqual(len(rows), 6)
             self.assertEqual(len(genes), 6)
             self.assertFalse(any("psnr" in column.lower() for column in rows[0]))
+            self.assertIn("selection_min_distance", rows[0])
+            self.assertIn("selection_min_distance_raw", rows[0])
+            self.assertIn("params_real", rows[0])
 
             with manifest_csv.open(newline="", encoding="utf-8") as handle:
                 manifest = list(csv.DictReader(handle))
             self.assertEqual(len(manifest), 6)
             self.assertIn("--bass-gene-file", manifest[0]["train_command"])
+            self.assertIn("tools/eval_extra_datasets.py", manifest[0]["eval_extra_command"])
             self.assertTrue(Path(manifest[0]["bass_gene_file"]).exists())
+
+            with metadata_json.open(encoding="utf-8") as handle:
+                metadata = __import__("json").load(handle)
+            self.assertEqual(metadata["selection_method"], "stratified_random")
+            self.assertEqual(sum(metadata["pool_band_counts"].values()), 80)
 
 
 if __name__ == "__main__":
