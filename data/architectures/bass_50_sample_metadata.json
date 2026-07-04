@@ -1,29 +1,45 @@
 {
-  "created_at_utc": "2026-07-03T19:36:51.291232+00:00",
-  "description": "Large random valid BASS decoded-gene pool followed by greedy max-min coverage selection in normalized encoding/structural descriptor space. No PSNR or performance labels are used.",
+  "complexity_bins": 5,
+  "complexity_edges": [
+    0.0,
+    6.0,
+    8.0,
+    10.0,
+    12.0,
+    "inf"
+  ],
+  "complexity_strategy": "fixed",
+  "created_at_utc": "2026-07-03T19:56:16.533340+00:00",
+  "description": "Large valid BASS decoded-gene pool followed by architecture-space coverage selection in normalized encoding/structural descriptor space. The mixed pool policy combines uniform, medium-complexity, and lightweight structural priors without using PSNR or performance labels.",
   "descriptor_notes": [
     "Decoded 28-gene BASS encoding normalized by gene range.",
     "Structural descriptors include channel, operation/kernel/repeat counts, identity count, and estimated complexity.",
     "PCA is not used for selection and no performance label is used."
   ],
-  "epochs": 100,
+  "early_stopping_patience": 20,
   "exclude_reference": false,
   "gene_json_dir": "data/architectures/bass_50_sample/genes",
+  "lr_schedule": "plateau",
+  "max_epochs": 1000,
   "n_selected": 50,
   "output_csv": "data/architectures/bass_50_sample_architectures.csv",
   "overlap_reference_in_pool": 0,
   "overlap_reference_selected": 0,
-  "pool_size_requested": 10000,
-  "pool_size_unique": 10000,
+  "pool_policy": "mixed",
+  "pool_size_requested": 50000,
+  "pool_size_unique": 50000,
+  "reduce_lr_patience": 15,
   "reference_csv": [
     "data/20_full_trained_models.csv"
   ],
   "reference_gene_count": 20,
-  "sampling_method": "hybrid_random_pool_greedy_max_min",
+  "sampling_method": "hybrid_random_pool_stratified_max_min",
   "scale": 2,
   "seed": 20260703,
+  "selection_method": "stratified_max_min",
   "train_dir": "/data/DIV2K_train_HR",
   "trainer_manifest": "data/architectures/bass_50_sample_trainer_manifest.csv",
   "trainer_output_dir": "srir_outputs/bass_50_sample",
+  "training_stopping_policy": "Full training uses the repository trainer callbacks. The epoch value is only a maximum cap; EarlyStopping monitors validation PSNR and restores the best weights.",
   "val_dir": "/data/DIV2K_valid_HR"
 }
