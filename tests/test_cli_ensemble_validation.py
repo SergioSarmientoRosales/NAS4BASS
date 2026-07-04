@@ -161,6 +161,20 @@ class ArtifactValidationTests(unittest.TestCase):
         self.assertEqual(selected, [0, 2])
         self.assertAlmostEqual(distances[1], 4.0)
 
+    def test_proxy_alignment_matrix_counts_complexity_by_param_quintile(self):
+        from tools.validate_bass_sample import proxy_alignment_matrix
+
+        complexity_bins = [0, 0, 1, 1, 2]
+        params_real = [10, 100, 1000, 10000, 100000]
+
+        matrix = proxy_alignment_matrix(complexity_bins, params_real, n_bins=3)
+
+        self.assertEqual(len(matrix), 3)
+        self.assertEqual(sum(sum(row) for row in matrix), 5)
+        self.assertEqual(sum(matrix[0]), 2)
+        self.assertEqual(sum(matrix[1]), 2)
+        self.assertEqual(sum(matrix[2]), 1)
+
     def test_validate_csv_accepts_header_and_reports_duplicates(self):
         from tools.validate_artifacts import validate_csv_file
 
