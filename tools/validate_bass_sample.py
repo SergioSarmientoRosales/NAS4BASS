@@ -15,6 +15,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from tools.sample_bass_architectures import (
     SAMPLE_OUTPUT_FIELDS,
+    build_eval_extra_command_template,
     build_manifest_rows,
     build_sample_row,
     descriptor_matrix,
@@ -278,6 +279,12 @@ def main() -> int:
         early_stopping_patience=int(metadata.get("early_stopping_patience", 20)),
         reduce_lr_patience=int(metadata.get("reduce_lr_patience", 15)),
         lr_schedule=metadata.get("lr_schedule", "plateau"),
+        extra_eval_command_template=build_eval_extra_command_template(
+            set5_dir=metadata.get("extra_set5_dir", "/data/Set5"),
+            set14_dir=metadata.get("extra_set14_dir", "/data/Set14"),
+            bsd100_dir=metadata.get("extra_bsd100_dir", "/data/BSD100"),
+            output_dir=metadata.get("extra_eval_output_dir", "results/zerocost_50_stratified_random/extra_datasets"),
+        ),
     )
     if not args.dry_run:
         write_csv(trainer_manifest, manifest_rows, manifest_fieldnames())

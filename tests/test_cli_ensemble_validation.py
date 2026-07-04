@@ -250,6 +250,7 @@ class ArtifactValidationTests(unittest.TestCase):
                 manifest = list(csv.DictReader(handle))
             self.assertEqual(len(manifest), 6)
             self.assertIn("--bass-gene-file", manifest[0]["train_command"])
+            self.assertIn("tools/eval_extra_datasets.py", manifest[0]["eval_extra_command"])
             self.assertTrue(Path(manifest[0]["bass_gene_file"]).exists())
 
             with metadata_json.open(encoding="utf-8") as handle:
