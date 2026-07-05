@@ -17,11 +17,11 @@ Use it for:
 - User-provided Keras models.
 - Future BASS/NAS-generated Keras models.
 
-Default optimization uses Charbonnier loss with AdamW. Charbonnier is the loss,
-not an optimizer; Adam/AdamW performs the gradient updates. Learning rate is
-dynamic by default through `ReduceLROnPlateau` on `val_psnr`, with early stopping
-patience 20 and LR plateau patience 15 consecutive epochs without improvement.
-Any real `val_psnr` improvement resets the plateau counter.
+Default optimization uses MSE loss with AdamW to match the Stage 1 reference
+trainer. MSE/Charbonnier are losses; Adam/AdamW performs the gradient updates.
+Learning rate is dynamic by default through `ReduceLROnPlateau` on `val_psnr`,
+with early stopping patience 20 and LR plateau patience 15 consecutive epochs
+without improvement. Any real `val_psnr` improvement resets the plateau counter.
 
 The standard protocol keeps only the Stage 1-compatible run. It does not launch
 an automatic second Stage 2/p128 training pass. By default x2/x4 use
@@ -31,10 +31,10 @@ when GPU-aware sizing is preferred over strict reference comparability.
 
 Compared with the reference `.py`, preprocessing is aligned for direct HR-only
 DIV2K training: random HR crops, bicubic LR generation, normalized `[0, 1]`
-images, and paired augmentations. The main documented differences are the
-default Charbonnier loss instead of MSE, `repeats_per_image`-based epoch length
-instead of sliding-window patch-count steps, and center-crop validation instead
-of sliding-window validation patches.
+images, paired augmentations, MSE loss, patch-count epoch sizing, and
+sliding-window validation. The main documented differences are that Stage 2/p128
+is not run automatically, x3 defaults to p96 because p64 is not divisible by 3,
+and paired precomputed LR/HR validation still uses deterministic center crops.
 
 Direct DIV2K HR usage:
 

@@ -106,10 +106,10 @@ python -m srir_training.smoke_test --scale 4
 
 ## Training
 
-Charbonnier and Adam are not alternatives. Charbonnier is the training loss; it
-measures the restoration error. Adam or AdamW is the optimizer; it decides how
-weights are updated from gradients. The default is Charbonnier loss with AdamW,
-which is a stable SRIR starting point.
+MSE and Charbonnier are losses; Adam or AdamW is the optimizer that updates
+weights from gradients. The default is MSE with AdamW to match the Stage 1
+training reference. Charbonnier remains available through `--loss charbonnier`
+when a more robust restoration loss is desired.
 
 The default data geometry is aligned with the Stage 1 training reference:
 `patch_size=64` and `batch_size=64`. For x3, the CLI uses `patch_size=96` when
@@ -155,21 +155,21 @@ Aligned behavior:
 - Direct HR-only DIV2K mode samples random HR crops, generates LR crops with
   bicubic downsampling, normalizes images to `[0, 1]`, and applies paired SR-safe
   augmentations.
+- Default optimization uses MSE with AdamW, matching the reference trainer.
+- Default epoch length is computed from the deterministic sliding-window patch
+  count instead of from `repeats_per_image`.
+- Default HR-only validation uses deterministic sliding-window patches and the
+  same overlap convention as the reference trainer.
 - Checkpointing, CSV logging, dynamic LR reduction, early stopping, and final
   PSNR/SSIM reporting are preserved.
 
 Documented differences:
 
-- The default loss remains Charbonnier with AdamW for robustness. The reference
-  script uses MSE with AdamW; pass `--loss mse` when exact loss matching is
-  required.
-- Epoch length is controlled by `repeats_per_image` unless `--steps-per-epoch`
-  is provided. The reference script estimates steps from a sliding-window patch
-  count, so exact training duration matching requires passing explicit
-  `--steps-per-epoch`.
-- Validation uses deterministic center crops by default. The reference script
-  evaluates deterministic sliding-window validation patches; use explicit
-  `--validation-steps` only to cap evaluation, not to reproduce that patch grid.
+- Stage 2/p128 is intentionally not run automatically.
+- x3 uses `patch_size=96` by default because the Stage 1 p64 setting is not
+  divisible by 3.
+- Paired precomputed LR/HR validation falls back to deterministic center-crop
+  validation; sliding validation is implemented for direct HR-only DIV2K mode.
 
 Example x2 training run with direct DIV2K HR folders:
 

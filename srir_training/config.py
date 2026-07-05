@@ -23,6 +23,9 @@ class DataConfig:
     max_patch_size: int = 128
     max_batch_size: int = 64
     repeats_per_image: int = 8
+    validation_overlap: float = 0.1
+    epoch_steps_mode: str = "patch_count"  # patch_count | repeat
+    validation_mode: str = "sliding"  # sliding | center
     cache: bool = False
     shuffle_buffer: int = 512
     augment: bool = True
@@ -52,7 +55,7 @@ class TrainingConfig:
     cosine_alpha: float = 0.1
     optimizer: str = "adamw"
     weight_decay: float = 1e-8
-    loss: str = "charbonnier"
+    loss: str = "mse"
     charbonnier_epsilon: float = 1e-3
     global_clipnorm: float = 1.0
     steps_per_epoch: int | None = None
@@ -65,7 +68,7 @@ class TrainingConfig:
     min_learning_rate: float = 1e-7
     checkpoint_monitor: str = "val_psnr"
     checkpoint_mode: str = "max"
-    steps_per_execution: int = 1
+    steps_per_execution: int = 100
     resume_from: str = ""
 
 
@@ -156,6 +159,12 @@ def validate_config(cfg: TrainConfig) -> None:
         raise ValueError("downsample_method must be one of: area, bicubic, bilinear, lanczos3, lanczos5")
     if cfg.data.repeats_per_image <= 0:
         raise ValueError("repeats_per_image must be positive")
+    if not 0.0 <= cfg.data.validation_overlap < 1.0:
+        raise ValueError("validation_overlap must be in [0, 1)")
+    if cfg.data.epoch_steps_mode not in {"patch_count", "repeat"}:
+        raise ValueError("epoch_steps_mode must be one of: patch_count, repeat")
+    if cfg.data.validation_mode not in {"sliding", "center"}:
+        raise ValueError("validation_mode must be one of: sliding, center")
     model_sources = [
         bool(cfg.model.custom_model_path),
         bool(cfg.model.bass_gene),
@@ -232,6 +241,9 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--min-patch-size", type=int, default=None)
     parser.add_argument("--max-patch-size", type=int, default=None)
     parser.add_argument("--max-batch-size", type=int, default=None)
+    parser.add_argument("--validation-overlap", type=float, default=None)
+    parser.add_argument("--epoch-steps-mode", choices=["patch_count", "repeat"], default=None)
+    parser.add_argument("--validation-mode", choices=["sliding", "center"], default=None)
     parser.add_argument("--downsample-method", choices=["area", "bicubic", "bilinear", "lanczos3", "lanczos5"], default=None)
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--learning-rate", type=float, default=None)
@@ -283,6 +295,9 @@ def config_from_args(argv: list[str] | None = None) -> TrainConfig:
         ("data", "min_patch_size"): args.min_patch_size,
         ("data", "max_patch_size"): args.max_patch_size,
         ("data", "max_batch_size"): args.max_batch_size,
+        ("data", "validation_overlap"): args.validation_overlap,
+        ("data", "epoch_steps_mode"): args.epoch_steps_mode,
+        ("data", "validation_mode"): args.validation_mode,
         ("data", "downsample_method"): args.downsample_method,
         ("data", "lr_suffix"): args.lr_suffix,
         ("training", "epochs"): args.epochs,

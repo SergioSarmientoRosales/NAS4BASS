@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import tensorflow as tf
 
 from srir_training.augmentations import (
@@ -56,6 +57,61 @@ def _list_images(directory: str) -> list[Path]:
     if not root.exists():
         raise FileNotFoundError(f"Image directory does not exist: {directory}")
     return sorted(path for path in root.iterdir() if _is_image(path))
+
+
+def _sliding_step(cfg: DataConfig) -> int:
+    return max(1, int(cfg.patch_size * (1.0 - cfg.validation_overlap)))
+
+
+def count_patches_for_shape(height: int, width: int, cfg: DataConfig) -> int:
+    if height < cfg.patch_size or width < cfg.patch_size:
+        return 0
+    step = _sliding_step(cfg)
+    rows = ((height - cfg.patch_size) // step) + 1
+    cols = ((width - cfg.patch_size) // step) + 1
+    return int(rows * cols)
+
+
+def get_image_hw(path: str, *, channels: int) -> tuple[int, int] | None:
+    try:
+        image = decode_image(tf.constant(path), channels=channels)
+        shape = tf.shape(image)
+        return int(shape[0].numpy()), int(shape[1].numpy())
+    except Exception:
+        return None
+
+
+def count_sliding_patches(paths: list[str], cfg: DataConfig) -> tuple[int, int]:
+    total_patches = 0
+    images_used = 0
+    for path in paths:
+        hw = get_image_hw(path, channels=cfg.channels)
+        if hw is None:
+            continue
+        patches = count_patches_for_shape(hw[0], hw[1], cfg)
+        if patches > 0:
+            total_patches += patches
+            images_used += 1
+    return total_patches, images_used
+
+
+def _training_examples_per_epoch(paths: list[str], cfg: DataConfig) -> int:
+    repeat_examples = len(paths) * cfg.repeats_per_image
+    if cfg.epoch_steps_mode == "repeat":
+        return repeat_examples
+
+    total_patches, images_used = count_sliding_patches(paths, cfg)
+    if total_patches > 0:
+        print(
+            "[DATA] patch_count epoch: images_used={0} patches={1}".format(
+                images_used,
+                total_patches,
+            )
+        )
+        return total_patches
+
+    print("[WARN] No sliding patches counted; falling back to repeats_per_image epoch sizing")
+    return repeat_examples
 
 
 def _require_resolved(cfg: DataConfig) -> None:
@@ -226,7 +282,7 @@ def make_paired_dataset(
             )
         )
         ds = ds.repeat()
-        examples_per_epoch = len(pairs) * cfg.repeats_per_image
+        examples_per_epoch = _training_examples_per_epoch(hr_paths, cfg)
 
     counter = tf.data.experimental.Counter()
     ds = tf.data.Dataset.zip((ds, counter))
@@ -310,7 +366,7 @@ def make_hr_only_dataset(
         )
         ds = ds.flat_map(lambda hr_path: tf.data.Dataset.from_tensors(hr_path).repeat(cfg.repeats_per_image))
         ds = ds.repeat()
-        examples_per_epoch = len(images) * cfg.repeats_per_image
+        examples_per_epoch = _training_examples_per_epoch(hr_paths, cfg)
 
     counter = tf.data.experimental.Counter()
     ds = tf.data.Dataset.zip((ds, counter))
@@ -381,6 +437,86 @@ def make_hr_only_dataset(
     return ds, info
 
 
+def _hr_sliding_val_generator(paths: list[str], cfg: DataConfig):
+    patch_size = cfg.patch_size
+    lr_patch = cfg.patch_size // cfg.scale
+    step = _sliding_step(cfg)
+
+    batch_lr = []
+    batch_hr = []
+    for path in paths:
+        try:
+            hr_image = decode_image(tf.constant(path), channels=cfg.channels).numpy()
+        except Exception:
+            continue
+
+        height, width = hr_image.shape[:2]
+        if height < patch_size or width < patch_size:
+            continue
+
+        for y in range(0, height - patch_size + 1, step):
+            for x in range(0, width - patch_size + 1, step):
+                hr = hr_image[y:y + patch_size, x:x + patch_size, :]
+                lr = tf.image.resize(
+                    hr,
+                    [lr_patch, lr_patch],
+                    method=cfg.downsample_method,
+                    antialias=True,
+                ).numpy()
+                batch_lr.append(np.clip(lr, 0.0, 1.0).astype(np.float32))
+                batch_hr.append(np.clip(hr, 0.0, 1.0).astype(np.float32))
+
+                if len(batch_lr) == cfg.batch_size:
+                    yield np.asarray(batch_lr, dtype=np.float32), np.asarray(batch_hr, dtype=np.float32)
+                    batch_lr = []
+                    batch_hr = []
+
+
+def make_hr_only_sliding_val_dataset(
+    images: list[HRImage],
+    cfg: DataConfig,
+) -> tuple[tf.data.Dataset, DatasetInfo]:
+    _require_resolved(cfg)
+    if not images:
+        raise ValueError("Cannot build a dataset from an empty HR image list")
+
+    hr_paths = [image.hr_path for image in images]
+    total_patches, images_used = count_sliding_patches(hr_paths, cfg)
+    steps = max(1, total_patches // cfg.batch_size)
+    examples_per_epoch = steps * cfg.batch_size
+    print(
+        "[DATA] sliding validation: images_used={0} patches={1} steps={2}".format(
+            images_used,
+            total_patches,
+            steps,
+        )
+    )
+
+    lr_patch = cfg.patch_size // cfg.scale
+    ds = tf.data.Dataset.from_generator(
+        lambda: _hr_sliding_val_generator(hr_paths, cfg),
+        output_signature=(
+            tf.TensorSpec(
+                shape=(cfg.batch_size, lr_patch, lr_patch, cfg.channels),
+                dtype=tf.float32,
+            ),
+            tf.TensorSpec(
+                shape=(cfg.batch_size, cfg.patch_size, cfg.patch_size, cfg.channels),
+                dtype=tf.float32,
+            ),
+        ),
+    )
+    ds = ds.take(steps).prefetch(AUTOTUNE)
+
+    info = DatasetInfo(
+        pairs=len(images),
+        examples_per_epoch=examples_per_epoch,
+        batch_size=cfg.batch_size,
+        steps=steps,
+    )
+    return ds, info
+
+
 def build_train_val_datasets(cfg: DataConfig, *, seed: int):
     _require_resolved(cfg)
     train_hr_dir = cfg.train_hr_dir or cfg.directory_train
@@ -406,6 +542,8 @@ def build_train_val_datasets(cfg: DataConfig, *, seed: int):
             lr_suffix=cfg.lr_suffix,
         )
         train_ds, train_info = make_paired_dataset(train_pairs, cfg, training=True, seed=seed)
+        if cfg.validation_mode == "sliding":
+            print("[WARN] Sliding validation is HR-only; using paired center-crop validation")
         val_ds, val_info = make_paired_dataset(val_pairs, cfg, training=False, seed=seed + 1)
         return train_ds, val_ds, train_info, val_info
 
@@ -417,7 +555,10 @@ def build_train_val_datasets(cfg: DataConfig, *, seed: int):
     train_images = collect_hr_images(train_hr_dir)
     val_images = collect_hr_images(val_hr_dir)
     train_ds, train_info = make_hr_only_dataset(train_images, cfg, training=True, seed=seed)
-    val_ds, val_info = make_hr_only_dataset(val_images, cfg, training=False, seed=seed + 1)
+    if cfg.validation_mode == "sliding":
+        val_ds, val_info = make_hr_only_sliding_val_dataset(val_images, cfg)
+    else:
+        val_ds, val_info = make_hr_only_dataset(val_images, cfg, training=False, seed=seed + 1)
     return train_ds, val_ds, train_info, val_info
 
 

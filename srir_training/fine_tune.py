@@ -79,6 +79,9 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--min-patch-size", type=int, default=None)
     parser.add_argument("--max-patch-size", type=int, default=None)
     parser.add_argument("--max-batch-size", type=int, default=None)
+    parser.add_argument("--validation-overlap", type=float, default=None)
+    parser.add_argument("--epoch-steps-mode", choices=["patch_count", "repeat"], default=None)
+    parser.add_argument("--validation-mode", choices=["sliding", "center"], default=None)
     parser.add_argument("--downsample-method", choices=["area", "bicubic", "bilinear", "lanczos3", "lanczos5"], default=None)
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--learning-rate", type=float, default=None)
@@ -132,6 +135,9 @@ def fine_tune_config_from_args(args) -> TrainConfig:
         ("data", "min_patch_size"): args.min_patch_size,
         ("data", "max_patch_size"): args.max_patch_size,
         ("data", "max_batch_size"): args.max_batch_size,
+        ("data", "validation_overlap"): args.validation_overlap,
+        ("data", "epoch_steps_mode"): args.epoch_steps_mode,
+        ("data", "validation_mode"): args.validation_mode,
         ("data", "downsample_method"): args.downsample_method,
         ("data", "lr_suffix"): args.lr_suffix,
         ("training", "epochs"): args.epochs,
@@ -296,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
         seed=cfg.runtime.seed,
     )
     steps_per_epoch = cfg.training.steps_per_epoch or train_info.steps
-    validation_steps = cfg.training.validation_steps
+    validation_steps = cfg.training.validation_steps or val_info.steps
 
     print(
         "[DATA] train_pairs={0} train_examples_per_epoch={1} steps_per_epoch={2}".format(
@@ -306,6 +312,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
     print(f"[DATA] val_pairs={val_info.pairs}")
+    if validation_steps is not None:
+        print(f"[DATA] validation_steps={validation_steps}")
 
     strategy = get_strategy()
     print(

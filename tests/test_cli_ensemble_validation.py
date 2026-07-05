@@ -134,6 +134,9 @@ class SrirTrainingConfigTests(unittest.TestCase):
         parsed = config_from_args([])
         self.assertEqual(parsed.data.patch_size, 64)
         self.assertEqual(parsed.data.batch_size, 64)
+        self.assertEqual(parsed.data.epoch_steps_mode, "patch_count")
+        self.assertEqual(parsed.data.validation_mode, "sliding")
+        self.assertEqual(parsed.training.loss, "mse")
 
     def test_auto_size_flag_defers_patch_and_batch_resolution(self):
         from srir_training.config import config_from_args
@@ -151,6 +154,27 @@ class SrirTrainingConfigTests(unittest.TestCase):
         self.assertEqual(cfg.data.patch_size, 96)
         self.assertEqual(cfg.data.patch_size % cfg.data.scale, 0)
         self.assertEqual(cfg.data.batch_size, 64)
+
+    def test_repeat_and_center_modes_remain_explicit_options(self):
+        from srir_training.config import config_from_args
+
+        cfg = config_from_args(
+            [
+                "--epoch-steps-mode",
+                "repeat",
+                "--validation-mode",
+                "center",
+                "--validation-overlap",
+                "0.25",
+                "--loss",
+                "charbonnier",
+            ]
+        )
+
+        self.assertEqual(cfg.data.epoch_steps_mode, "repeat")
+        self.assertEqual(cfg.data.validation_mode, "center")
+        self.assertAlmostEqual(cfg.data.validation_overlap, 0.25)
+        self.assertEqual(cfg.training.loss, "charbonnier")
 
 
 class ArtifactValidationTests(unittest.TestCase):

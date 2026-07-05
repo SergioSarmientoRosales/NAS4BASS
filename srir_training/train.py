@@ -77,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     steps_per_epoch = cfg.training.steps_per_epoch or train_info.steps
-    validation_steps = cfg.training.validation_steps
+    validation_steps = cfg.training.validation_steps or val_info.steps
 
     print(
         "[DATA] train_pairs={0} train_examples_per_epoch={1} steps_per_epoch={2}".format(
@@ -87,6 +87,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
     print(f"[DATA] val_pairs={val_info.pairs}")
+    if validation_steps is not None:
+        print(f"[DATA] validation_steps={validation_steps}")
 
     strategy = get_strategy()
     print(
