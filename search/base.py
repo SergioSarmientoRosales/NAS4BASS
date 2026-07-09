@@ -13,6 +13,9 @@ class BaseSearch:
         early_stop: bool = False,
         early_stop_min_gen: int = 200,
         early_stop_repeat_patience: int = 10,
+        seed: int | None = None,
+        max_evals: int | None = None,
+        **kwargs,
     ):
         self.problem = problem
         self.pop_size = pop_size
@@ -24,6 +27,9 @@ class BaseSearch:
         self.early_stop = early_stop
         self.early_stop_min_gen = early_stop_min_gen
         self.early_stop_repeat_patience = early_stop_repeat_patience
+        self.seed = seed
+        self.max_evals_override = max_evals
+        self.extra_params = kwargs
 
     def run(self):
         raise NotImplementedError

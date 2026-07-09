@@ -18,6 +18,25 @@ class DummyModel:
         return np.full((len(x),), self.value, dtype=np.float64)
 
 
+class DummyNASProblem:
+    n_var = 8
+    n_obj = 2
+    xl = np.zeros(n_var, dtype=int)
+    xu = np.ones(n_var, dtype=int)
+
+    def __init__(self):
+        self.evaluations = 0
+
+    def get_decoded_ind(self, ind):
+        return [int(value) for value in ind]
+
+    def _evaluate_multi(self, ind, n_eval):
+        self.evaluations += 1
+        quality = float(sum(ind))
+        params = float(sum((idx + 1) * int(value) for idx, value in enumerate(ind)))
+        return [-quality, params]
+
+
 class CliAndEnsembleTests(unittest.TestCase):
     def test_main_help_uses_lightweight_import_path(self):
         repo_root = Path(__file__).resolve().parents[1]
@@ -61,12 +80,21 @@ class CliAndEnsembleTests(unittest.TestCase):
         self.assertIn("imia", SEARCH_CLI_CHOICES)
         self.assertIn("sms_emoa", SEARCH_CLI_CHOICES)
         self.assertIn("sms-emoa", SEARCH_CLI_CHOICES)
+        self.assertIn("lhs", SEARCH_CLI_CHOICES)
+        self.assertIn("bayesopt", SEARCH_CLI_CHOICES)
+        self.assertIn("successive_halving", SEARCH_CLI_CHOICES)
+        self.assertIn("hyperband", SEARCH_CLI_CHOICES)
+        self.assertIn("hill_climbing", SEARCH_CLI_CHOICES)
+        self.assertIn("simulated_annealing", SEARCH_CLI_CHOICES)
+        self.assertIn("nsga2", SEARCH_CLI_CHOICES)
 
         dummy_problem = object()
         cases = {
             "cmopso": "CMOPSO",
             "imia": "IMIA",
             "sms-emoa": "SMSEMOA",
+            "lhs": "LatinHypercubeSearch",
+            "bayesian_optimization": "BayesianOptimizationSearch",
         }
         for search_name, class_name in cases.items():
             search = build_search_method(
@@ -76,6 +104,63 @@ class CliAndEnsembleTests(unittest.TestCase):
                 n_gen=1,
             )
             self.assertEqual(type(search).__name__, class_name)
+
+    def test_budgeted_searches_respect_max_evals_in_dummy_mode(self):
+        from core.registry import build_search_method
+
+        for name in [
+            "random",
+            "lhs",
+            "mo_random",
+            "bayesopt",
+            "hill_climbing",
+            "simulated_annealing",
+        ]:
+            problem = DummyNASProblem()
+            search = build_search_method(
+                name,
+                problem=problem,
+                pop_size=4,
+                n_gen=None,
+                max_evals=6,
+                seed=123,
+                save_flush_every=1000,
+            )
+            pop, nds = search()
+            self.assertEqual(problem.evaluations, 6, msg=name)
+            self.assertEqual(len(pop["X"]), 6, msg=name)
+            self.assertGreaterEqual(len(nds["X"]), 1, msg=name)
+
+    def test_non_dominated_front_uses_minimization_direction(self):
+        from search.common import non_dominated_indices
+
+        objectives = [
+            [-5.0, 10.0],
+            [-4.0, 8.0],
+            [-3.0, 12.0],
+            [-5.0, 11.0],
+        ]
+
+        self.assertEqual(non_dominated_indices(objectives), [0, 1])
+
+    def test_successive_halving_and_hyperband_run_in_dummy_mode(self):
+        from core.registry import build_search_method
+
+        for name in ["successive_halving", "hyperband"]:
+            problem = DummyNASProblem()
+            search = build_search_method(
+                name,
+                problem=problem,
+                pop_size=4,
+                n_gen=None,
+                max_evals=9,
+                seed=7,
+                eta=3,
+            )
+            pop, nds = search()
+            self.assertLessEqual(problem.evaluations, 9, msg=name)
+            self.assertGreaterEqual(len(pop["X"]), 1, msg=name)
+            self.assertGreaterEqual(len(nds["X"]), 1, msg=name)
 
     def test_early_stop_rejects_searches_without_support(self):
         from core.registry import build_search_method

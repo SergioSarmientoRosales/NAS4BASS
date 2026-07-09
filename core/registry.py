@@ -1,8 +1,29 @@
 from __future__ import annotations
 
-SEARCH_REGISTRY = {"nsga3", "random", "cmopso", "imia", "sms_emoa"}
+SEARCH_REGISTRY = {
+    "nsga3",
+    "nsga2",
+    "random",
+    "mo_random",
+    "lhs",
+    "bayesopt",
+    "successive_halving",
+    "hyperband",
+    "hill_climbing",
+    "simulated_annealing",
+    "cmopso",
+    "imia",
+    "sms_emoa",
+}
 SEARCH_ALIASES = {
     "sms-emoa": "sms_emoa",
+    "latin_hypercube": "lhs",
+    "quasi_random": "lhs",
+    "bayesian": "bayesopt",
+    "bayesian_optimization": "bayesopt",
+    "sh": "successive_halving",
+    "annealing": "simulated_annealing",
+    "mo-random": "mo_random",
 }
 SEARCH_CLI_CHOICES = tuple(sorted(SEARCH_REGISTRY | set(SEARCH_ALIASES)))
 EARLY_STOP_CAPABLE_SEARCHES = {"nsga3"}
@@ -21,6 +42,10 @@ def build_search_method(
     early_stop: bool = False,
     early_stop_min_gen: int = 200,
     early_stop_repeat_patience: int = 10,
+    seed: int | None = None,
+    max_evals: int | None = None,
+    scalarization_weights: tuple[float, float] | None = None,
+    eta: int = 3,
 ):
     name = name.lower()
     name = SEARCH_ALIASES.get(name, name)
@@ -41,10 +66,42 @@ def build_search_method(
         from search.nsga3 import NSGA3
 
         search_cls = NSGA3
+    elif name == "nsga2":
+        from search.baselines import NSGA2
+
+        search_cls = NSGA2
     elif name == "random":
         from search.random_search import RandomSearch
 
         search_cls = RandomSearch
+    elif name == "mo_random":
+        from search.baselines import MultiObjectiveRandomSearch
+
+        search_cls = MultiObjectiveRandomSearch
+    elif name == "lhs":
+        from search.baselines import LatinHypercubeSearch
+
+        search_cls = LatinHypercubeSearch
+    elif name == "bayesopt":
+        from search.baselines import BayesianOptimizationSearch
+
+        search_cls = BayesianOptimizationSearch
+    elif name == "successive_halving":
+        from search.baselines import SuccessiveHalvingSearch
+
+        search_cls = SuccessiveHalvingSearch
+    elif name == "hyperband":
+        from search.baselines import HyperbandSearch
+
+        search_cls = HyperbandSearch
+    elif name == "hill_climbing":
+        from search.baselines import HillClimbingSearch
+
+        search_cls = HillClimbingSearch
+    elif name == "simulated_annealing":
+        from search.baselines import SimulatedAnnealingSearch
+
+        search_cls = SimulatedAnnealingSearch
     elif name == "cmopso":
         from search.cmopso import CMOPSO
 
@@ -68,6 +125,20 @@ def build_search_method(
         "output_file": output_file,
     }
 
+    budgeted_names = {
+        "nsga2",
+        "random",
+        "mo_random",
+        "lhs",
+        "bayesopt",
+        "successive_halving",
+        "hyperband",
+        "hill_climbing",
+        "simulated_annealing",
+    }
+    if name in budgeted_names:
+        kwargs.update({"seed": seed, "max_evals": max_evals})
+
     if name in {"nsga3", "random"}:
         kwargs.update(
             {
@@ -77,6 +148,18 @@ def build_search_method(
                 "early_stop_repeat_patience": early_stop_repeat_patience,
             }
         )
+
+    if name in {
+        "bayesopt",
+        "successive_halving",
+        "hyperband",
+        "hill_climbing",
+        "simulated_annealing",
+    }:
+        kwargs["scalarization_weights"] = scalarization_weights
+
+    if name in {"successive_halving", "hyperband"}:
+        kwargs["eta"] = eta
 
     return search_cls(**kwargs)
 

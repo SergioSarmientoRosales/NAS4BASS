@@ -4,13 +4,14 @@ import os
 import glob
 import time
 import argparse
+import json
 from datetime import datetime
 
 from config import DEFAULT_POP_SIZE, DEFAULT_ENSEMBLE_METHOD
 from utils.seed import set_global_seed
 
 from core.problem import NASProblem
-from core.registry import SEARCH_CLI_CHOICES, build_search_method, build_evaluator
+from core.registry import SEARCH_ALIASES, SEARCH_CLI_CHOICES, build_search_method, build_evaluator
 
 
 def parse_ensemble_weights(text: str | None) -> list[float] | dict[str, float] | None:
@@ -110,10 +111,12 @@ def parse_args():
 
     parser.add_argument(
         "--search",
+        "--algorithm",
+        dest="search",
         type=str,
         default="nsga3",
         choices=SEARCH_CLI_CHOICES,
-        help="Search method",
+        help="Search algorithm",
     )
 
     parser.add_argument(
@@ -161,6 +164,30 @@ def parse_args():
         type=int,
         default=None,
         help="Maximum number of generations. Optional when --early-stop is enabled.",
+    )
+    parser.add_argument(
+        "--max-evals",
+        type=int,
+        default=None,
+        help=(
+            "Maximum architecture evaluations for budgeted baselines. "
+            "If omitted, these methods use pop_size * n_gen."
+        ),
+    )
+    parser.add_argument(
+        "--scalarization-weights",
+        type=str,
+        default="1.0,0.0",
+        help=(
+            "Two comma-separated minimization weights for single-objective "
+            "baselines over objective_0 and objective_1, e.g. '1.0,0.0'."
+        ),
+    )
+    parser.add_argument(
+        "--halving-eta",
+        type=int,
+        default=3,
+        help="Reduction factor for successive_halving and hyperband.",
     )
 
     parser.add_argument(
@@ -247,6 +274,9 @@ def print_run_configuration(
     print(f"[INFO] Output file: {output_file}")
     print(f"[INFO] Population size: {args.pop_size}")
     print(f"[INFO] Max generations: {args.n_gen}")
+    print(f"[INFO] Max evaluations: {args.max_evals}")
+    print(f"[INFO] Scalarization weights: {args.scalarization_weights}")
+    print(f"[INFO] Halving eta: {args.halving_eta}")
     print(f"[INFO] Early stop enabled: {args.early_stop}")
     print(f"[INFO] Early stop min gen: {args.early_stop_min_gen}")
     print(f"[INFO] Early stop repeat patience: {args.early_stop_repeat_patience}")
@@ -290,14 +320,52 @@ def save_run_summary(summary: dict, filepath: str) -> None:
         writer.writerow(summary)
 
 
+def parse_scalarization_weights(text: str) -> tuple[float, float]:
+    parts = [part.strip() for part in text.split(",") if part.strip()]
+    if len(parts) != 2:
+        raise ValueError("--scalarization-weights must contain exactly two comma-separated values")
+    weights = (float(parts[0]), float(parts[1]))
+    if weights[0] < 0 or weights[1] < 0:
+        raise ValueError("--scalarization-weights must be non-negative")
+    if weights[0] == 0 and weights[1] == 0:
+        raise ValueError("--scalarization-weights cannot be both zero")
+    return weights
+
+
+def save_run_config(args, filepath: str) -> None:
+    config = vars(args).copy()
+    with open(filepath, "w", encoding="utf-8") as handle:
+        json.dump(config, handle, indent=2, sort_keys=True)
+
+
 def main():
     start = time.time()
     args = parse_args()
 
-    if not args.early_stop and args.n_gen is None:
+    budgeted_searches = {
+        "random",
+        "mo_random",
+        "lhs",
+        "bayesopt",
+        "successive_halving",
+        "hyperband",
+        "hill_climbing",
+        "simulated_annealing",
+    }
+    normalized_search = SEARCH_ALIASES.get(args.search.lower(), args.search.lower())
+    if not args.early_stop and args.n_gen is None and (
+        args.max_evals is None or normalized_search not in budgeted_searches
+    ):
         raise ValueError(
-            "You must provide --n-gen when --early-stop is disabled."
+            "You must provide --n-gen when --early-stop is disabled. "
+            "--max-evals can replace --n-gen only for budgeted baselines."
         )
+    if args.max_evals is not None and args.max_evals <= 0:
+        raise ValueError("--max-evals must be positive")
+    if args.halving_eta < 2:
+        raise ValueError("--halving-eta must be at least 2")
+
+    scalarization_weights = parse_scalarization_weights(args.scalarization_weights)
 
     set_global_seed(args.seed, seed_tensorflow=False)
 
@@ -335,6 +403,11 @@ def main():
         seed_folder,
         f"cache_summary_seed_{args.seed}_{timestamp}.csv"
     )
+    run_config_file = os.path.join(
+        seed_folder,
+        f"run_config_seed_{args.seed}_{timestamp}.json"
+    )
+    save_run_config(args, run_config_file)
 
     print_run_configuration(args, model_paths, selected_models, seed_folder, output_file)
 
@@ -373,6 +446,10 @@ def main():
         early_stop=args.early_stop,
         early_stop_min_gen=args.early_stop_min_gen,
         early_stop_repeat_patience=args.early_stop_repeat_patience,
+        seed=args.seed,
+        max_evals=args.max_evals,
+        scalarization_weights=scalarization_weights,
+        eta=args.halving_eta,
     )
 
     final_population, non_dominated_solutions = search_method()
@@ -404,6 +481,9 @@ def main():
         "selected_models": ",".join(selected_models) if selected_models is not None else "ALL",
         "pop_size": args.pop_size,
         "n_gen": args.n_gen,
+        "max_evals": args.max_evals,
+        "scalarization_weights": args.scalarization_weights,
+        "halving_eta": args.halving_eta,
         "early_stop": args.early_stop,
         "early_stop_min_gen": args.early_stop_min_gen,
         "early_stop_repeat_patience": args.early_stop_repeat_patience,

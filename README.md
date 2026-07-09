@@ -28,7 +28,10 @@ Why this matters: training every candidate architecture is expensive; therefore,
 ## Main Features
 
 - Modular BASS-style architecture encoding and decoding.
-- NSGA-III, SMS-EMOA, CMOPSO, IMIA, and random-search backends.
+- Search backends for NSGA-III, NSGA-II, SMS-EMOA, CMOPSO, IMIA,
+  random search, multi-objective random search, Latin hypercube sampling,
+  simple Bayesian optimization, successive halving, Hyperband, hill climbing,
+  and simulated annealing.
 - Model-based evaluation with serialized surrogate predictors in `models/`.
 - Zero-cost predictor evaluation, including SynFlow, Fisher, SNIP, GraSP, GradNorm, NWOT, Zen, ZiCo, Jacobian covariance, L2 norm, plain score, and parameter-count baselines.
 - CSV outputs for population histories, non-dominated solutions, and cache summaries.
@@ -104,11 +107,18 @@ Important arguments:
 - `--ensemble-weights` supports positional weights such as `0.5,0.5` and named weights such as `xgb=0.5,rf=0.5`.
 - `--zc-metric` selects a zero-cost metric, for example `synflow`, `fisher`, `snip`, or `param_score`.
 - `--zc-score-transform` selects the raw or normalized score direction used by zero-cost NAS.
+- `--search` or `--algorithm` selects the NAS algorithm.
 - `--search nsga3` runs NSGA-III.
+- `--search nsga2` runs a compact NSGA-II baseline.
 - `--search sms_emoa` or `--search sms-emoa` runs SMS-EMOA.
 - `--search cmopso` runs CMOPSO.
 - `--search imia` runs IMIA.
 - `--search random` runs random search.
+- `--search lhs` runs discrete Latin hypercube sampling.
+- `--search bayesopt` runs lightweight internal Bayesian optimization.
+- `--search successive_halving` or `--search hyperband` runs budgeted racing baselines.
+- `--search hill_climbing` or `--search simulated_annealing` runs local-search baselines.
+- `--max-evals` sets an explicit evaluation budget for direct baselines.
 - `--n-gen` is required unless `--early-stop` is enabled.
 - `--outdir` controls where generated CSV files are written.
 
@@ -123,6 +133,42 @@ Named weights are recommended when using a weighted surrogate ensemble:
 ```bash
 python main.py --eval model_based --ensemble-method weighted_mean --selected-models xgb,rf --ensemble-weights xgb=0.7,rf=0.3 --search nsga3 --seed 1 --pop-size 100 --n-gen 500
 ```
+
+## Search Algorithms
+
+All algorithms use the same `NASProblem` objective convention: objective 0 is
+`-primary_score` and objective 1 is parameter count, so lower is better for all
+objectives. Single-objective baselines use `--scalarization-weights` over these
+minimization objectives; the default `1.0,0.0` optimizes quality only.
+
+| Algorithm | Type | Objective mode | Budget | When to use |
+| --- | --- | --- | --- | --- |
+| `nsga3` | evolutionary | multi-objective | `pop_size * n_gen` plus initial population | Main many-objective baseline |
+| `nsga2` | evolutionary | multi-objective | generations | Compact NSGA-style comparison |
+| `sms_emoa` | evolutionary | multi-objective | generations | Hypervolume-oriented comparison |
+| `cmopso` | swarm | multi-objective | generations | Particle-swarm comparison |
+| `imia` | island/indicator | multi-objective | generations | Indicator-based comparison |
+| `random` | non-evolutionary | multi-objective front extraction | `--max-evals` or `pop_size * n_gen` | Fair simple baseline |
+| `mo_random` | non-evolutionary | multi-objective front extraction | `--max-evals` | Explicit MO random baseline |
+| `lhs` | non-evolutionary | multi-objective front extraction | `--max-evals` | More uniform discrete sampling |
+| `bayesopt` | model-based baseline | scalarized | `--max-evals` | Cheap single-objective proxy search |
+| `successive_halving` | racing | scalarized | `--max-evals` | Keep only the best candidates across rounds |
+| `hyperband` | racing | scalarized | `--max-evals` | Multiple halving brackets |
+| `hill_climbing` | local search | scalarized | `--max-evals` | Trajectory baseline from random start |
+| `simulated_annealing` | local search | scalarized | `--max-evals` | Local search with probabilistic escapes |
+
+Examples:
+
+```bash
+python main.py --eval zero_cost --zc-metric param_score --algorithm random --max-evals 100 --seed 1
+python main.py --eval zero_cost --zc-metric synflow --algorithm lhs --max-evals 100 --seed 1
+python main.py --eval model_based --algorithm bayesopt --max-evals 200 --scalarization-weights 1.0,0.000001 --seed 1
+python main.py --eval zero_cost --zc-metric synflow --algorithm successive_halving --max-evals 120 --halving-eta 3 --seed 1
+python main.py --eval zero_cost --zc-metric synflow --algorithm simulated_annealing --max-evals 100 --seed 1
+```
+
+Each run saves the full CLI configuration as `run_config_seed_<seed>_<timestamp>.json`,
+population/evaluation history as CSV, the non-dominated front, and a cache summary.
 
 ## Zero-Cost Predictor Benchmark
 
