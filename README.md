@@ -46,7 +46,7 @@ NAS4BASS/
   Plots.py                Tables and figures for benchmark outputs
   config.py               Search-space constants and defaults
   core/                   NAS problem and registry wiring
-  search/                 NSGA-III, SMS-EMOA, CMOPSO, IMIA, random search, and operators
+  search/                 One module per search backend, shared operators, and search utilities
   search_space/           BASS encoding, decoding, and model builder
   evaluators/             Model-based and zero-cost evaluators
   predictors/             Surrogate model loading, selection, and ensembling

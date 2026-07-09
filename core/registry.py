@@ -67,7 +67,7 @@ def build_search_method(
 
         search_cls = NSGA3
     elif name == "nsga2":
-        from search.baselines import NSGA2
+        from search.nsga2 import NSGA2
 
         search_cls = NSGA2
     elif name == "random":
@@ -75,31 +75,31 @@ def build_search_method(
 
         search_cls = RandomSearch
     elif name == "mo_random":
-        from search.baselines import MultiObjectiveRandomSearch
+        from search.mo_random import MultiObjectiveRandomSearch
 
         search_cls = MultiObjectiveRandomSearch
     elif name == "lhs":
-        from search.baselines import LatinHypercubeSearch
+        from search.lhs import LatinHypercubeSearch
 
         search_cls = LatinHypercubeSearch
     elif name == "bayesopt":
-        from search.baselines import BayesianOptimizationSearch
+        from search.bayesopt import BayesianOptimizationSearch
 
         search_cls = BayesianOptimizationSearch
     elif name == "successive_halving":
-        from search.baselines import SuccessiveHalvingSearch
+        from search.successive_halving import SuccessiveHalvingSearch
 
         search_cls = SuccessiveHalvingSearch
     elif name == "hyperband":
-        from search.baselines import HyperbandSearch
+        from search.hyperband import HyperbandSearch
 
         search_cls = HyperbandSearch
     elif name == "hill_climbing":
-        from search.baselines import HillClimbingSearch
+        from search.hill_climbing import HillClimbingSearch
 
         search_cls = HillClimbingSearch
     elif name == "simulated_annealing":
-        from search.baselines import SimulatedAnnealingSearch
+        from search.simulated_annealing import SimulatedAnnealingSearch
 
         search_cls = SimulatedAnnealingSearch
     elif name == "cmopso":
