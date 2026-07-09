@@ -82,6 +82,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--validation-overlap", type=float, default=None)
     parser.add_argument("--epoch-steps-mode", choices=["patch_count", "repeat"], default=None)
     parser.add_argument("--validation-mode", choices=["sliding", "center"], default=None)
+    parser.add_argument("--validation-cache", choices=["memory", "disk", "none"], default=None)
     parser.add_argument("--downsample-method", choices=["area", "bicubic", "bilinear", "lanczos3", "lanczos5"], default=None)
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--learning-rate", type=float, default=None)
@@ -89,11 +90,15 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--warmup-epochs", type=int, default=None)
     parser.add_argument("--cosine-alpha", type=float, default=None)
     parser.add_argument("--optimizer", choices=["adam", "adamw"], default=None)
+    parser.add_argument("--weight-decay", type=float, default=None)
+    parser.add_argument("--adam-epsilon", type=float, default=None)
     parser.add_argument("--loss", choices=["charbonnier", "l1", "mae", "mse"], default=None)
     parser.add_argument("--global-clipnorm", type=float, default=None)
     parser.add_argument("--steps-per-epoch", type=int, default=None)
     parser.add_argument("--validation-steps", type=int, default=None)
+    parser.add_argument("--steps-per-execution", type=int, default=None)
     parser.add_argument("--early-stopping-patience", type=int, default=None)
+    parser.add_argument("--early-stopping-min-delta", type=float, default=None)
     parser.add_argument("--reduce-lr-patience", type=int, default=None)
     parser.add_argument("--reduce-lr-min-delta", type=float, default=None)
     parser.add_argument("--reduce-lr-factor", type=float, default=None)
@@ -138,6 +143,7 @@ def fine_tune_config_from_args(args) -> TrainConfig:
         ("data", "validation_overlap"): args.validation_overlap,
         ("data", "epoch_steps_mode"): args.epoch_steps_mode,
         ("data", "validation_mode"): args.validation_mode,
+        ("data", "validation_cache"): args.validation_cache,
         ("data", "downsample_method"): args.downsample_method,
         ("data", "lr_suffix"): args.lr_suffix,
         ("training", "epochs"): args.epochs,
@@ -146,11 +152,15 @@ def fine_tune_config_from_args(args) -> TrainConfig:
         ("training", "warmup_epochs"): args.warmup_epochs,
         ("training", "cosine_alpha"): args.cosine_alpha,
         ("training", "optimizer"): args.optimizer,
+        ("training", "weight_decay"): args.weight_decay,
+        ("training", "adam_epsilon"): args.adam_epsilon,
         ("training", "loss"): args.loss,
         ("training", "global_clipnorm"): args.global_clipnorm,
         ("training", "steps_per_epoch"): args.steps_per_epoch,
         ("training", "validation_steps"): args.validation_steps,
+        ("training", "steps_per_execution"): args.steps_per_execution,
         ("training", "early_stopping_patience"): args.early_stopping_patience,
+        ("training", "early_stopping_min_delta"): args.early_stopping_min_delta,
         ("training", "reduce_lr_patience"): args.reduce_lr_patience,
         ("training", "reduce_lr_min_delta"): args.reduce_lr_min_delta,
         ("training", "reduce_lr_factor"): args.reduce_lr_factor,
@@ -301,6 +311,10 @@ def main(argv: list[str] | None = None) -> int:
         cfg.data,
         seed=cfg.runtime.seed,
     )
+    if cfg.data.validation_cache == "memory":
+        val_ds = val_ds.cache()
+    elif cfg.data.validation_cache == "disk":
+        val_ds = val_ds.cache(str(base_run_dir / "val_cache"))
     steps_per_epoch = cfg.training.steps_per_epoch or train_info.steps
     validation_steps = cfg.training.validation_steps or val_info.steps
 

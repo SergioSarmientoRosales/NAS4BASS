@@ -36,6 +36,10 @@ srir_training/
   metrics.py
   callbacks.py
   utils.py
+  gpu.py
+  heartbeat.py
+  complexity.py
+  batch_train.py
 ```
 
 ## Installation
@@ -142,6 +146,53 @@ This means isolated fluctuations do not trigger a learning-rate drop. The
 learning rate is reduced only after 15 validation epochs in a row fail to improve
 the monitored metric. A non-finite loss still stops training through
 `TerminateOnNaN`.
+
+## Multi-GPU BASS Batch Training
+
+For full training of many BASS JSON architectures, use the modular multi-GPU
+entry point. It is based on the production `train_50_bass_4gpu_v4.py` design but
+split across reusable modules:
+
+- `gpu.py`: GPU discovery, identity, and VRAM queries through `nvidia-smi`.
+- `complexity.py`: model-complexity inspection and VRAM-aware batch estimates.
+- `heartbeat.py`: worker heartbeat files and process-liveness updates.
+- `batch_train.py`: parent scheduler plus isolated per-GPU workers.
+
+The parent process assigns architectures to GPUs and starts one worker process
+per active GPU slot. Each worker sets `CUDA_DEVICE_ORDER=PCI_BUS_ID` and
+`CUDA_VISIBLE_DEVICES` before importing TensorFlow, estimates a safe batch size,
+runs a short dry-run, trains with isolated `BackupAndRestore` directories, and
+backs off on OOM, `steps_per_execution`, XLA, or divergence failures.
+
+Example for the 50 sampled BASS architectures:
+
+```bash
+python -m srir_training.batch_train \
+  --repo-dir /home/TrainSR/NAS4BASS \
+  --gene-dir /home/TrainSR/NAS4BASS/data/architectures/bass_50_sample/genes \
+  --gene-glob "bass_*.json" \
+  --directory-train /home/TrainSR/datasets/DIV2K_train_HR \
+  --directory-val /home/TrainSR/datasets/DIV2K_valid_HR \
+  --output-dir /home/TrainSR/nas4bass_runs/bass_50 \
+  --gpus auto \
+  --max-concurrent-gpus 4 \
+  --upscale-factor 2
+```
+
+Useful controls:
+
+- `--gpus 0,1,2,3` fixes the physical GPU list.
+- `--max-concurrent-gpus` caps simultaneous workers.
+- `--min-batch`, `--max-batch`, and `--vram-fraction` bound automatic batch sizing.
+- `--initial-steps-per-execution` and `--min-steps-per-execution` control compiled step grouping.
+- `--heartbeat-timeout-sec` controls the parent watchdog.
+- `--validation-cache memory|disk|none` controls validation patch caching.
+
+The multi-GPU BASS trainer fixes `patch_size=64` and restricts
+`--upscale-factor` to x2 or x4, because 64 is not divisible by 3. Each
+architecture writes `result.json`, `worker_stdout.log`, `worker_events.log`,
+heartbeats, checkpoints, and final metrics under `output-dir/<arch_id>/`; the
+parent also writes `summary.csv`.
 
 ## Reference Script Coherence
 

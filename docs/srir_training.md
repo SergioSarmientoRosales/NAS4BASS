@@ -13,6 +13,8 @@ Use it for:
   `/data/DIV2K_valid_HR`, with LR generated on the fly.
 - Stage 1 reference defaults (`patch_size=64`, `batch_size=64`) with optional
   GPU-aware automatic sizing through `--auto-size`.
+- Modular multi-GPU BASS batch training through
+  `python -m srir_training.batch_train`.
 - A default residual CNN baseline.
 - User-provided Keras models.
 - Future BASS/NAS-generated Keras models.
@@ -62,5 +64,17 @@ Fine-tuning entry point for folders containing `best.keras` files:
 ```bash
 python -m srir_training.fine_tune --help
 ```
+
+Multi-GPU batch entry point for BASS JSON files:
+
+```bash
+python -m srir_training.batch_train --help
+```
+
+This scheduler is the repository version of the standalone 4-GPU trainer:
+GPU discovery and VRAM queries live in `srir_training/gpu.py`, heartbeat/watchdog
+helpers in `srir_training/heartbeat.py`, model-complexity batch sizing in
+`srir_training/complexity.py`, and the parent/worker orchestration in
+`srir_training/batch_train.py`.
 
 Full usage details are in [`srir_training/README.md`](../srir_training/README.md).

@@ -26,6 +26,7 @@ class DataConfig:
     validation_overlap: float = 0.1
     epoch_steps_mode: str = "patch_count"  # patch_count | repeat
     validation_mode: str = "sliding"  # sliding | center
+    validation_cache: str = "memory"  # memory | disk | none
     cache: bool = False
     shuffle_buffer: int = 512
     augment: bool = True
@@ -55,6 +56,7 @@ class TrainingConfig:
     cosine_alpha: float = 0.1
     optimizer: str = "adamw"
     weight_decay: float = 1e-8
+    adam_epsilon: float = 1e-7
     loss: str = "mse"
     charbonnier_epsilon: float = 1e-3
     global_clipnorm: float = 1.0
@@ -165,6 +167,8 @@ def validate_config(cfg: TrainConfig) -> None:
         raise ValueError("epoch_steps_mode must be one of: patch_count, repeat")
     if cfg.data.validation_mode not in {"sliding", "center"}:
         raise ValueError("validation_mode must be one of: sliding, center")
+    if cfg.data.validation_cache not in {"memory", "disk", "none"}:
+        raise ValueError("validation_cache must be one of: memory, disk, none")
     model_sources = [
         bool(cfg.model.custom_model_path),
         bool(cfg.model.bass_gene),
@@ -200,6 +204,8 @@ def validate_config(cfg: TrainConfig) -> None:
         raise ValueError("min_learning_rate must be non-negative")
     if cfg.training.weight_decay < 0:
         raise ValueError("weight_decay must be non-negative")
+    if cfg.training.adam_epsilon <= 0:
+        raise ValueError("adam_epsilon must be positive")
     if cfg.training.global_clipnorm is not None and cfg.training.global_clipnorm < 0:
         raise ValueError("global_clipnorm must be non-negative")
     if cfg.training.steps_per_epoch is not None and cfg.training.steps_per_epoch <= 0:
@@ -244,6 +250,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--validation-overlap", type=float, default=None)
     parser.add_argument("--epoch-steps-mode", choices=["patch_count", "repeat"], default=None)
     parser.add_argument("--validation-mode", choices=["sliding", "center"], default=None)
+    parser.add_argument("--validation-cache", choices=["memory", "disk", "none"], default=None)
     parser.add_argument("--downsample-method", choices=["area", "bicubic", "bilinear", "lanczos3", "lanczos5"], default=None)
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--learning-rate", type=float, default=None)
@@ -251,11 +258,15 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--warmup-epochs", type=int, default=None)
     parser.add_argument("--cosine-alpha", type=float, default=None)
     parser.add_argument("--optimizer", choices=["adam", "adamw"], default=None)
+    parser.add_argument("--weight-decay", type=float, default=None)
+    parser.add_argument("--adam-epsilon", type=float, default=None)
     parser.add_argument("--loss", choices=["charbonnier", "l1", "mae", "mse"], default=None)
     parser.add_argument("--global-clipnorm", type=float, default=None)
     parser.add_argument("--steps-per-epoch", type=int, default=None)
     parser.add_argument("--validation-steps", type=int, default=None)
+    parser.add_argument("--steps-per-execution", type=int, default=None)
     parser.add_argument("--early-stopping-patience", type=int, default=None)
+    parser.add_argument("--early-stopping-min-delta", type=float, default=None)
     parser.add_argument("--reduce-lr-patience", type=int, default=None)
     parser.add_argument("--reduce-lr-min-delta", type=float, default=None)
     parser.add_argument("--reduce-lr-factor", type=float, default=None)
@@ -298,6 +309,7 @@ def config_from_args(argv: list[str] | None = None) -> TrainConfig:
         ("data", "validation_overlap"): args.validation_overlap,
         ("data", "epoch_steps_mode"): args.epoch_steps_mode,
         ("data", "validation_mode"): args.validation_mode,
+        ("data", "validation_cache"): args.validation_cache,
         ("data", "downsample_method"): args.downsample_method,
         ("data", "lr_suffix"): args.lr_suffix,
         ("training", "epochs"): args.epochs,
@@ -306,11 +318,15 @@ def config_from_args(argv: list[str] | None = None) -> TrainConfig:
         ("training", "warmup_epochs"): args.warmup_epochs,
         ("training", "cosine_alpha"): args.cosine_alpha,
         ("training", "optimizer"): args.optimizer,
+        ("training", "weight_decay"): args.weight_decay,
+        ("training", "adam_epsilon"): args.adam_epsilon,
         ("training", "loss"): args.loss,
         ("training", "global_clipnorm"): args.global_clipnorm,
         ("training", "steps_per_epoch"): args.steps_per_epoch,
         ("training", "validation_steps"): args.validation_steps,
+        ("training", "steps_per_execution"): args.steps_per_execution,
         ("training", "early_stopping_patience"): args.early_stopping_patience,
+        ("training", "early_stopping_min_delta"): args.early_stopping_min_delta,
         ("training", "reduce_lr_patience"): args.reduce_lr_patience,
         ("training", "reduce_lr_min_delta"): args.reduce_lr_min_delta,
         ("training", "reduce_lr_factor"): args.reduce_lr_factor,

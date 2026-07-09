@@ -37,6 +37,23 @@ class CliAndEnsembleTests(unittest.TestCase):
         self.assertIn("imia", result.stdout)
         self.assertIn("sms_emoa", result.stdout)
 
+    def test_batch_train_help_uses_lightweight_import_path(self):
+        repo_root = Path(__file__).resolve().parents[1]
+
+        result = subprocess.run(
+            [sys.executable, "-m", "srir_training.batch_train", "--help"],
+            cwd=repo_root,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("--gpus", result.stdout)
+        self.assertIn("--max-concurrent-gpus", result.stdout)
+        self.assertIn("--worker-mode", result.stdout)
+
     def test_search_registry_exposes_new_methods(self):
         from core.registry import SEARCH_CLI_CHOICES, build_search_method
 
@@ -175,6 +192,35 @@ class SrirTrainingConfigTests(unittest.TestCase):
         self.assertEqual(cfg.data.validation_mode, "center")
         self.assertAlmostEqual(cfg.data.validation_overlap, 0.25)
         self.assertEqual(cfg.training.loss, "charbonnier")
+
+    def test_multi_gpu_batch_estimator_is_bounded_and_power_of_two(self):
+        from srir_training.complexity import ModelComplexity, estimate_batch_size
+
+        complexity = ModelComplexity(
+            params=250_000,
+            conv_like_layers=30,
+            conv2d_layers=25,
+            depthwise_layers=3,
+            transpose_layers=2,
+            max_channels=64,
+            sum_channels=1024,
+            max_kernel_area=9,
+        )
+
+        batch = estimate_batch_size(
+            free_mb=10_000,
+            complexity=complexity,
+            patch_size=64,
+            scale=2,
+            precision="mixed_float16",
+            vram_fraction=0.72,
+            min_batch=8,
+            max_batch=1024,
+        )
+
+        self.assertGreaterEqual(batch, 8)
+        self.assertLessEqual(batch, 1024)
+        self.assertEqual(batch & (batch - 1), 0)
 
 
 class ArtifactValidationTests(unittest.TestCase):

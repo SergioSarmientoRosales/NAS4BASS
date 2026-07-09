@@ -33,6 +33,7 @@ def compile_model(model: tf.keras.Model, cfg) -> None:
         name=cfg.training.optimizer,
         learning_rate=cfg.training.learning_rate,
         weight_decay=cfg.training.weight_decay,
+        epsilon=cfg.training.adam_epsilon,
         global_clipnorm=cfg.training.global_clipnorm,
     )
     loss = get_loss(
@@ -75,6 +76,10 @@ def main(argv: list[str] | None = None) -> int:
         cfg.data,
         seed=cfg.runtime.seed,
     )
+    if cfg.data.validation_cache == "memory":
+        val_ds = val_ds.cache()
+    elif cfg.data.validation_cache == "disk":
+        val_ds = val_ds.cache(str(run_dir / "val_cache"))
 
     steps_per_epoch = cfg.training.steps_per_epoch or train_info.steps
     validation_steps = cfg.training.validation_steps or val_info.steps

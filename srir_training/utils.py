@@ -131,10 +131,12 @@ def build_optimizer(
     name: str,
     learning_rate: float,
     weight_decay: float,
+    epsilon: float,
     global_clipnorm: float | None,
 ) -> tf.keras.optimizers.Optimizer:
     kwargs = {
         "learning_rate": learning_rate,
+        "epsilon": epsilon,
     }
     if global_clipnorm is not None and global_clipnorm > 0:
         kwargs["global_clipnorm"] = global_clipnorm
