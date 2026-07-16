@@ -1,0 +1,9 @@
+{
+  "timestamp": 1783787871.432873,
+  "timestamp_iso": "2026-07-11T16:37:51",
+  "arch_id": "bass_0031",
+  "gpu_id": "0",
+  "event": "worker_exit",
+  "return_code": 0,
+  "status": "complete"
+}

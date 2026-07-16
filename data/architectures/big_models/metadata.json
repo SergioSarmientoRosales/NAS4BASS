@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "collection": "big_models",
+  "model_count": 9,
+  "gene_length": 28,
+  "gene_value_range": [
+    0,
+    7
+  ],
+  "default_scale": 2,
+  "source_summary": "DNNs/Full Trained/Big Models/summary.csv",
+  "gene_json_dir": "data/architectures/big_models/genes",
+  "recovery_tool": "tools/recover_big_model_genes.py",
+  "recovery_command": "python tools/recover_big_model_genes.py",
+  "canonicalization": "Prefer the sole exact repository gene with the same expanded topology. Otherwise choose the lexicographically smallest decoded 28-value gene that reproduces the serialized three-branch Keras topology. Duplicate channel, kernel, and repeat aliases use indices 0-3; identity uses [7, 0, 0].",
+  "scientific_note": "Canonical-equivalent genes reproduce the serialized architecture exactly, but must not be represented as the unavailable original genotype."
+}

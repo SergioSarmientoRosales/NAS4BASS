@@ -76,13 +76,13 @@ class ZeroCostEvaluator(BaseEvaluator):
             )
 
     def _architecture_seed(self, decoded_ind: list[int]) -> int:
-        payload = f"{self.seed}|{self.metric_name}|{','.join(map(str, decoded_ind))}"
+        payload = f"{self.seed}|{','.join(map(str, decoded_ind))}"
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
         return int(digest[:8], 16)
 
     def _set_architecture_seed(self, decoded_ind: list[int]) -> None:
         if self.deterministic_arch_seed:
-            tf.random.set_seed(self._architecture_seed(decoded_ind))
+            tf.keras.utils.set_random_seed(self._architecture_seed(decoded_ind))
 
     def _get_shared_sr_context(self):
         if self._dummy_inputs is None or self._dummy_targets is None:

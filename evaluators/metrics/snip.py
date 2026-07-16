@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import tensorflow as tf
 
+from evaluators.metrics._weights import collect_kernel_weights
+
 
 def _collect_target_weights(model: tf.keras.Model):
     """
@@ -13,38 +15,7 @@ def _collect_target_weights(model: tf.keras.Model):
     - DepthwiseConv2D     -> depthwise_kernel
     - Dense               -> kernel
     """
-    layers_iter = (
-        model._flatten_layers(include_self=False, recursive=True)
-        if hasattr(model, "_flatten_layers")
-        else model.layers
-    )
-
-    weights = []
-    seen = set()
-
-    for layer in layers_iter:
-        candidates = []
-
-        if isinstance(layer, tf.keras.layers.Conv2D):
-            candidates.append(getattr(layer, "kernel", None))
-        elif isinstance(layer, tf.keras.layers.Conv2DTranspose):
-            candidates.append(getattr(layer, "kernel", None))
-        elif isinstance(layer, tf.keras.layers.DepthwiseConv2D):
-            candidates.append(getattr(layer, "depthwise_kernel", None))
-        elif isinstance(layer, tf.keras.layers.Dense):
-            candidates.append(getattr(layer, "kernel", None))
-
-        for var in candidates:
-            if var is None:
-                continue
-
-            key = getattr(var, "path", None) or getattr(var, "name", None) or str(id(var))
-            if key in seen:
-                continue
-            seen.add(key)
-            weights.append(var)
-
-    return weights
+    return collect_kernel_weights(model)
 
 
 def compute_snip_per_weight(

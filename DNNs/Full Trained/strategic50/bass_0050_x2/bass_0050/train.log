@@ -1,0 +1,18 @@
+[2026-07-15T03:35:56] [GPU] memory_growth enabled. Visible GPUs: [PhysicalDevice(name='/physical_device:GPU:0', device_type='GPU')]
+[2026-07-15T03:35:56] [XLA] JIT enabled: True
+[2026-07-15T03:35:56] [MP] precision policy: <DTypePolicy "mixed_float16">
+[2026-07-15T03:35:57] [ATTEMPT 1] arch=bass_0050 gpu=0 batch=512 val_batch=256 lr=0.0005 spe=100 xla=True
+[2026-07-15T03:35:57] [BACKUP] attempt=1 backup_dir=/home/TrainSR/nas4bass_runs/bass50_curated_tail44_50_x2_delta005_vm2_A100_tail44_50_20260713_101956/bass_0050_x2/bass_0050/backup_attempt01_b512_spe100 state=new
+[2026-07-15T03:35:57] [DRY-RUN] Starting dry-run: train_steps=2, val_steps=1, batch=512, val_batch=256, spe=100, xla=True
+[2026-07-15T03:36:44] [DRY-RUN] Passed training and validation checks.
+[2026-07-15T03:37:29] [TRAIN] params=1817376
+[2026-07-15T03:37:29] [TRAIN] complexity=ModelComplexity(params=1817376, conv_like_layers=35, conv2d_layers=32, depthwise_layers=3, transpose_layers=0, max_channels=96, sum_channels=1602, max_kernel_area=49)
+[2026-07-15T03:37:29] [TRAIN] batch_size=512, val_batch_size=256
+[2026-07-15T03:37:29] [TRAIN] learning_rate=0.0005
+[2026-07-15T03:37:29] [TRAIN] steps_per_execution=100, xla_enabled=True
+[2026-07-15T03:37:29] [TRAIN] train_images=800, train_patches=650300, train_steps=1270
+[2026-07-15T03:37:29] [TRAIN] val_images=100, val_patches=82670, val_steps=323
+[2026-07-15T03:37:29] [TRAIN] validation_cache=memory
+[2026-07-15T03:37:29] [TRAIN] attempt_index=1, initial_epoch=0, max_epochs=200
+[2026-07-15T10:23:21] [EVAL] Loading best model: /home/TrainSR/nas4bass_runs/bass50_curated_tail44_50_x2_delta005_vm2_A100_tail44_50_20260713_101956/bass_0050_x2/bass_0050/best.keras
+[2026-07-15T10:23:41] [COMPLETE] bass_0050 PSNR=36.527123 elapsed=24467.8s
